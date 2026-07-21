@@ -1,0 +1,147 @@
+---
+title: "TargetESP Module"
+description: "Example 3D ESP effect rendering rotating arcs around a crosshair target in Minecraft."
+---
+
+The **Lua TargetESP** module performs 3D world rendering in Minecraft, drawing rotating rings/arcs around crosshair targets using trigonometry, Y-axis wave oscillations, and 3D textured quads (`draw_textured_quad_3d`).
+
+## Features
+
+- **3D World Render Event**: Listens to 3D world rendering via `on_world_render(function(event) ... end)`.
+- **Frame Interpolation**: Accurate position calculation using `frameDepth` (`prev_x + (x - prev_x) * frameDepth`).
+- **Camera Billboard Alignment**: Aligns 3D quad particles to player camera using `renderer:get_camera_vectors(wr)`.
+- **Interactive Sliders**: Adjustable rotation speed (`Rotation Speed`) and particle size (`Size`).
+
+## Source Code `targetesp.lua`
+
+<CodeGroup>
+  ```lua targetesp.lua
+  -- Register module in VISUALS category
+  local module = client:register_module("Lua TargetESP", "2 rotating arcs around target with Y wave oscillation", "VISUALS")
+
+  -- Module settings (rotation speed slider, particle size slider, theme color checkbox)
+  local speed_slider = module:add_slider("Rotation Speed", "Rotation Speed", 0.1, 10.0, 2.5, 0.1)
+  local particle_size = module:add_slider("Size", "Particle Size", 0.2, 0.5, 0.35, 0.05)
+  local use_theme_color = module:add_checkbox("Use Theme Color", "Use client theme color", true)
+
+  -- Animation phase & transparency variables
+  local rotPhase = 0.0
+  local pulsePhase = 0.0
+  local targetAlpha = 0.0
+
+  -- Fast math functions
+  local sin = math.sin
+  local cos = math.cos
+  local rad = math.rad
+  local floor = math.floor
+
+  -- 3D World Render Event Handler
+  module:on_world_render(function(event)
+      -- Get target in crosshair
+      local target = minecraft:get_target_entity()
+      
+      -- Test on local player when chat is open
+      if target == nil and minecraft:is_chat_open() then
+          target = minecraft:get_local_player()
+      end
+
+      -- Smooth alpha fade (Fade In / Fade Out)
+      if target and minecraft:is_entity_alive(target) then
+          targetAlpha = math.min(1.0, targetAlpha + 0.12)
+          rotPhase = rotPhase + speed_slider:getValue() * 1.5
+          pulsePhase = pulsePhase + 0.1 * 0.04
+      else
+          targetAlpha = math.max(0.0, targetAlpha - 0.18)
+      end
+
+      -- Exit if no target or zero alpha
+      if targetAlpha <= 0.001 or not target then return end
+
+      local wr = event:worldRenderer()
+      
+      -- Interpolate entity position with frameDepth
+      local frameDepth = event:frameDepth()
+      local rx = minecraft:get_entity_prev_x(target) + (minecraft:get_entity_x(target) - minecraft:get_entity_prev_x(target)) * frameDepth
+      local ry = minecraft:get_entity_prev_y(target) + (minecraft:get_entity_y(target) - minecraft:get_entity_prev_y(target)) * frameDepth
+      local rz = minecraft:get_entity_prev_z(target) + (minecraft:get_entity_z(target) - minecraft:get_entity_prev_z(target)) * frameDepth
+
+      local targetHeight = minecraft:get_entity_height(target)
+      local baseRadius = minecraft:get_entity_width(target) * 1.0
+
+      -- Camera vectors for billboard particle alignment
+      local camera = renderer:get_camera_vectors(wr)
+      local rxX, rxY, rxZ = camera[1], camera[2], camera[3]
+      local ruX, ruY, ruZ = camera[4], camera[5], camera[6]
+
+      local isTheme = use_theme_color:getValue()
+      local disableWalls = false
+      local pSize = particle_size:getValue()
+      local halfP = pSize * 0.5
+
+      -- Y-axis wave oscillation
+      local yAmp = 1.0 * (targetHeight * 0.4)
+      local yWaveOffset = sin(pulsePhase * 2.0) * yAmp
+
+      local centerY = ry + (targetHeight * 0.5) + yWaveOffset
+
+      local arcAngleSpan = 120.0
+      local segmentsPerArc = 18
+
+      -- Two opposing arcs (0 deg & 180 deg)
+      local arcs = {
+          { offset = 0.0, idx = 1 },
+          { offset = 180.0, idx = 2 }
+      }
+
+      -- Render arc segments in 3D space
+      for _, arc in ipairs(arcs) do
+          for s = 0, segmentsPerArc - 1 do
+              local localAngle = (arcAngleSpan / (segmentsPerArc - 1)) * s
+              local angle = rotPhase + arc.offset + localAngle
+              local r = rad(angle)
+
+              -- Particle 3D coordinates on circle
+              local px = rx + sin(r) * baseRadius
+              local py = centerY + sin(r * 2.0 + pulsePhase) * (yAmp * 0.15)
+              local pz = rz + cos(r) * baseRadius
+
+              -- Edge opacity smoothing
+              local edgeFactor = sin((s / (segmentsPerArc - 1)) * 3.14159)
+              local alphaByte = floor((170 + 85 * sin(pulsePhase * 3.0)) * targetAlpha * edgeFactor)
+
+              if alphaByte > 1 then
+                  local col
+                  if isTheme then
+                      col = renderer:get_client_primary_color_alpha(alphaByte)
+                  else
+                      if arc.idx == 1 then
+                          col = renderer:rgba(255, floor(140 + 100 * sin(r)), 50, alphaByte)
+                      else
+                          col = renderer:rgba(50, floor(180 + 75 * cos(r)), 255, alphaByte)
+                      end
+                  end
+
+                  local curHalf = halfP * (0.75 + 0.25 * edgeFactor)
+                  local dxR, dyR, dzR = rxX * curHalf, rxY * curHalf, rxZ * curHalf
+                  local dxU, dyU, dzU = ruX * curHalf, ruY * curHalf, ruZ * curHalf
+
+                  -- Render 3D textured quad bloom particle
+                  renderer:draw_textured_quad_3d(
+                      wr, "bloom",
+                      px - dxR - dxU, py - dyR - dyU, pz - dzR - dzU,
+                      px + dxR - dxU, py + dyR - dyU, pz + dzR - dzU,
+                      px + dxR + dxU, py + dyR + dyU, pz + dzR + dzU,
+                      px - dxR + dxU, py - dyR + dyU, pz - dzR + dzU,
+                      0, 0, 1, 0, 1, 1, 0, 1,
+                      col, true, disableWalls
+                  )
+              end
+          end
+      end
+  end)
+  ```
+</CodeGroup>
+
+<Tip>
+  Save `targetesp.lua` in `.minecraft/config/floral/scripts/`. The module will appear under the **VISUALS** category in the client menu.
+</Tip>

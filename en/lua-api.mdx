@@ -1,0 +1,425 @@
+---
+title: "Lua API Specification"
+description: "Complete reference for Floral system, renderer, game state, and HUD modules."
+---
+
+The Floral Lua API allows you to create custom modules, render 2D/3D graphics, draw text and blur effects, and inspect live Minecraft world state.
+
+<CardGroup cols={3}>
+  <Card title="client" icon="sliders-horizontal" href="#client-system--asset-management">
+    System registration, local & remote texture loading, asset management.
+  </Card>
+  <Card title="renderer" icon="palette" href="#renderer-2d--3d-rendering">
+    Color creation, text, shapes, blur, scale, and 3D textured quads.
+  </Card>
+  <Card title="minecraft" icon="gamepad-2" href="#minecraft-game-state--world-data">
+    Player status, entity info, active potions, keybinds, and item cooldowns.
+  </Card>
+</CardGroup>
+
+---
+
+## `client` (System & asset management)
+
+The `client` module handles module registration and texture/file downloading.
+
+### Methods
+
+<AccordionGroup>
+  <Accordion title="client:register_module(name, description, category)" defaultOpen>
+    Registers a new client module.
+
+    - **Parameters**:
+      - `name` *(string)*: Module name displayed in client settings.
+      - `description` *(string)*: Short description of the module functionality.
+      - `category` *(string)*: One of `"VISUALS"`, `"HUD"`, `"TOOLS"`.
+    - **Returns**: `LuaModule` object.
+
+    <CodeGroup>
+      ```lua Register Module
+      local my_module = client:register_module("My Module", "Custom Lua script", "HUD")
+      ```
+    </CodeGroup>
+  </Accordion>
+
+  <Accordion title="client:load_texture(textureName, filename)">
+    Loads a local PNG, JPG, or SVG texture into memory.
+
+    - **Parameters**:
+      - `textureName` *(string)*: Identifier for referencing the texture.
+      - `filename` *(string)*: Relative filename inside the script assets directory.
+    - **Returns**: `boolean` (`true` if successful).
+
+    <CodeGroup>
+      ```lua Load Local Texture
+      local success = client:load_texture("custom_logo", "assets/logo.png")
+      ```
+    </CodeGroup>
+  </Accordion>
+
+  <Accordion title="client:load_texture_url(textureName, url)">
+    Downloads and loads a texture directly from an HTTP/HTTPS URL.
+
+    - **Parameters**:
+      - `textureName` *(string)*: Unique texture identifier.
+      - `url` *(string)*: Full HTTP/HTTPS image URL.
+    - **Returns**: `boolean` (`true` if successful).
+
+    <CodeGroup>
+      ```lua Load URL Texture
+      client:load_texture_url("avatar", "https://example.com/avatar.png")
+      ```
+    </CodeGroup>
+  </Accordion>
+
+  <Accordion title="client:download_file(url, localFilename)">
+    Downloads a remote file directly to the scripts directory.
+
+    - **Parameters**:
+      - `url` *(string)*: Remote file URL.
+      - `localFilename` *(string)*: Destination file path relative to scripts folder.
+    - **Returns**: `boolean` (`true` if download succeeded).
+
+    <CodeGroup>
+      ```lua Download File
+      client:download_file("https://example.com/config.json", "config.json")
+      ```
+    </CodeGroup>
+  </Accordion>
+</AccordionGroup>
+
+### `LuaModule` & Settings API
+
+The `LuaModule` object is returned when registering a module using `client:register_module()`. It allows you to configure module parameters and subscribe to game rendering events.
+
+#### Methods of `LuaModule`
+
+<AccordionGroup>
+  <Accordion title="module:add_slider(name, description, min, max, default, step)">
+    Adds a slider setting to the module interface.
+
+    - **Parameters**:
+      - `name` *(string)*: Name of the setting.
+      - `description` *(string)*: Description of the setting.
+      - `min` *(float)*: Minimum slider value.
+      - `max` *(float)*: Maximum slider value.
+      - `default` *(float)*: Default starting value.
+      - `step` *(float)*: Step interval for slider values.
+    - **Returns**: `SliderSetting` object.
+
+    ```lua
+    local speed_slider = module:add_slider("Speed", "Rotation Speed", 0.1, 10.0, 2.5, 0.1)
+    ```
+  </Accordion>
+
+  <Accordion title="module:add_checkbox(name, description, default)">
+    Adds a checkbox setting to the module interface.
+
+    - **Parameters**:
+      - `name` *(string)*: Name of the setting.
+      - `description` *(string)*: Description of the setting.
+      - `default` *(boolean)*: Default starting state (`true` / `false`).
+    - **Returns**: `CheckboxSetting` object.
+
+    ```lua
+    local use_blur = module:add_checkbox("Blur", "Enable background blur shader", true)
+    ```
+  </Accordion>
+
+  <Accordion title="module:add_mode(name, description, optionsTable, default)">
+    Adds a mode selector (dropdown) setting to the module interface.
+
+    - **Parameters**:
+      - `name` *(string)*: Name of the setting.
+      - `description` *(string)*: Description of the setting.
+      - `optionsTable` *(table)*: Array of string options.
+      - `default` *(string)*: Default option name.
+    - **Returns**: `RadioSetting` object.
+
+    ```lua
+    local mode = module:add_mode("ESP Mode", "Select ESP style", {"Box", "Outline", "Chams"}, "Box")
+    ```
+  </Accordion>
+
+  <Accordion title="module:add_color(name, description, defaultRgba)">
+    Adds a color picker palette setting to the module interface.
+
+    - **Parameters**:
+      - `name` *(string)*: Name of the setting.
+      - `description` *(string)*: Description of the setting.
+      - `defaultRgba` *(int)*: Packed RGBA integer color.
+    - **Returns**: `ColorSetting` object.
+
+    ```lua
+    local color = module:add_color("ESP Color", "Select rendering color", renderer:rgba(255, 0, 0, 255))
+    ```
+  </Accordion>
+
+  <Accordion title="module:add_bind(name, description, defaultKeyCode)">
+    Adds a keybind setting to the module interface.
+
+    - **Parameters**:
+      - `name` *(string)*: Name of the setting.
+      - `description` *(string)*: Description of the setting.
+      - `defaultKeyCode` *(int)*: Default keyboard scan code (LWJGL).
+    - **Returns**: `BindSetting` object.
+
+    ```lua
+    local bind = module:add_bind("Toggle Key", "Activation Hotkey", 57) -- 57 = SPACE
+    ```
+  </Accordion>
+
+  <Accordion title="module:add_input(name, description, default)">
+    Adds a text input field setting to the module interface.
+
+    - **Parameters**:
+      - `name` *(string)*: Name of the setting.
+      - `description` *(string)*: Description of the setting.
+      - `default` *(string)*: Default input text.
+    - **Returns**: `InputSetting` object.
+
+    ```lua
+    local text_input = module:add_input("Custom Text", "Watermark text", "Floral Dev")
+    ```
+  </Accordion>
+
+  <Accordion title="module:setOnEnable(function)">
+    Registers a callback function executed when the module is toggled ON (enabled).
+
+    ```lua
+    module:setOnEnable(function()
+        client:load_texture_url("custom_head", "https://example.com/head.png")
+    end)
+    ```
+  </Accordion>
+
+  <Accordion title="module:on_render(function)">
+    Registers a callback function for 2D screen rendering (interface / HUD overlay).
+
+    ```lua
+    module:on_render(function()
+        renderer:draw_text("Hello World", 10, 10, renderer:rgb(255, 255, 255), 1.0)
+    end)
+    ```
+  </Accordion>
+
+  <Accordion title="module:on_world_render(function(event))">
+    Registers a callback function for 3D world rendering in the Minecraft game world.
+
+    - **Callback Parameters**:
+      - `event` *(RenderEvent)*: The 3D world render event object.
+
+    ```lua
+    module:on_world_render(function(event)
+        local wr = event:worldRenderer()
+        local depth = event:frameDepth()
+        -- 3D rendering operations
+    end)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+#### Setting Object Methods
+
+| Object | Method | Returns | Description |
+| :--- | :--- | :--- | :--- |
+| **All Settings** | `setting:setValue(value)` | `void` | Updates the setting value programmatically. |
+| `SliderSetting` | `setting:getValue()` | `float` | Gets the current value of the slider. |
+| `CheckboxSetting` | `setting:getValue()` | `boolean` | Gets the current boolean state of the checkbox. |
+| `RadioSetting` | `setting:getValue()` | `string` | Gets the currently selected option string. |
+| `InputSetting` | `setting:getValue()` | `string` | Gets the current input text value. |
+| `BindSetting` | `setting:getKeyCode()` | `int` | Gets the current bound key scan code. |
+| `BindSetting` | `setting:getKeyName()` | `string` | Gets the string name of the bound key. |
+| `ColorSetting` | `setting:getValue():toRgba()` | `int` | Gets the color packed as a packed RGBA integer. |
+| `ColorSetting` | `setting:getValue():hue()` | `float` | Hue value of color. |
+| `ColorSetting` | `setting:getValue():saturation()` | `float` | Saturation value of color. |
+| `ColorSetting` | `setting:getValue():brightness()` | `float` | Brightness value of color. |
+| `ColorSetting` | `setting:getValue():alpha()` | `float` | Alpha transparency component. |
+
+#### Event `RenderEvent`
+
+Passed to the `on_world_render` callback.
+
+| Method | Returns | Description |
+| :--- | :--- | :--- |
+| `event:worldRenderer()` | `WorldRenderer` | Returns the 3D world renderer object for drawing geometries. |
+| `event:frameDepth()` | `float` | Returns the partial tick frame time value for smooth position interpolation. |
+
+---
+
+## `renderer` (2D & 3D rendering)
+
+The `renderer` module provides high-performance drawing routines for HUD elements, custom UI, text, blur shaders, and 3D world geometry.
+
+### Colors & Shaders
+
+| Method | Returns | Description |
+| :--- | :--- | :--- |
+| `renderer:rgb(r, g, b)` | `int` | Create packed RGB color (0-255 values). |
+| `renderer:rgba(r, g, b, a)` | `int` | Create packed RGBA color with alpha channel. |
+| `renderer:get_client_primary_color()` | `int` | Get client primary theme color. |
+| `renderer:get_client_primary_color_alpha(alpha)` | `int` | Get primary theme color with customized alpha (0-255). |
+| `renderer:prepare_blur(strength)` | `void` | Prepare blur shader buffer with specified strength. |
+
+### 2D Drawing & Text
+
+| Method | Description |
+| :--- | :--- |
+| `renderer:draw_rect(x, y, w, h, color)` | Draw filled rectangle. |
+| `renderer:draw_rect_rounding(x, y, w, h, rounding, color)` | Draw filled rectangle with rounded corners. |
+| `renderer:draw_gradient(x, y, w, h, colorTL, colorTR, colorBR, colorBL)` | Draw rectangle with vertex colors (Packed RGBA). |
+| `renderer:draw_circle(cx, cy, radius, startDeg, pct, color)` | Draw filled circle sector (angles in degrees, `pct` 0.0 - 1.0). |
+| `renderer:draw_circle_outline(cx, cy, radius, startDeg, pct, thickness, color)` | Draw circle outline / arc of custom thickness. |
+| `renderer:draw_shadow(x, y, w, h, rounding, blurStrength, spread, color)` | Draw soft drop shadow under rectangle. |
+| `renderer:draw_blur(x, y, w, h, rounding)` | Draw blurred rectangle area. |
+| `renderer:draw_blur_alpha(x, y, w, h, rounding, alpha)` | Draw blurred area with alpha opacity. |
+| `renderer:draw_text(text, x, y, color, size)` | Draw text string at coordinates with font size. |
+| `renderer:draw_text_center(text, x, y, color, size)` | Draw text centered relative to `(x, y)`. |
+| `renderer:draw_text_centered_in_rect(text, x, y, w, h, color, size)` | Draw text centered within a target rectangle. |
+| `renderer:get_text_width(text, size)` → `float` | Calculate rendered width of text string. |
+| `renderer:get_centered_baseline_offset(size)` → `float` | Get font baseline offset for vertical alignment. |
+| `renderer:draw_texture(textureName, x, y, w, h, color)` | Draw loaded texture quad. |
+| `renderer:draw_texture_centered_in_rect(textureName, rx, ry, rw, rh, destW, destH, color)` | Draw texture centered inside target area. |
+| `renderer:draw_texture_rotated(textureName, x, y, w, h, rotationDegrees, color)` | Draw rotated texture. |
+| `renderer:draw_texture_centered_in_rect_rotated(...)` | Draw rotated texture centered inside target area. |
+| `renderer:draw_texture_region(textureName, x, y, w, h, u0, v0, u1, v1, color)` | Draw cropped texture region using UV values (0.0 - 1.0). |
+| `renderer:draw_texture_region_rounded(...)` | Draw cropped texture region with rounded corners. |
+| `renderer:draw_texture_region_rotated(...)` | Draw cropped and rotated texture region. |
+
+### Transformations & Drag Sessions
+
+| Method | Returns | Description |
+| :--- | :--- | :--- |
+| `renderer:begin_drag(id, x, y, w, h)` | `DragSession` | Initialize draggable UI region. |
+| `renderer:end_drag(session)` | `void` | Finalize active drag session. |
+| `renderer:render_drag_outline(session, rounding, scale)` | `void` | Draw a border outline around a draggable HUD element. |
+| `renderer:push_scale(scaleX, scaleY, centerX, centerY)` | `void` | Push matrix scale transform around center point. |
+| `renderer:pop_scale()` | `void` | Pop active scale transformation. |
+
+#### Draggable Session `DragSession`
+
+Returned by `renderer:begin_drag()`. Allows developers to implement interactive, user-draggable HUD overlay elements.
+
+| Method | Returns | Description |
+| :--- | :--- | :--- |
+| `session:positionX()` | `float` | Gets the current calculated X screen coordinate. |
+| `session:positionY()` | `float` | Gets the current calculated Y screen coordinate. |
+| `session:dragging()` | `boolean` | Returns `true` if the HUD element is actively being dragged by the mouse. |
+
+### 3D Rendering
+
+| Method | Returns | Description |
+| :--- | :--- | :--- |
+| `renderer:get_camera_vectors(worldRenderer)` | `float[]` | Retrieve camera right/up vectors `[rxX, rxY, rxZ, ruX, ruY, ruZ]`. |
+| `renderer:draw_quad_3d(...)` | `void` | Draw solid untextured 3D quad in world coordinates. |
+| `renderer:draw_textured_quad_3d(...)` | `void` | Render 3D textured quad in world coordinates. |
+| `renderer:draw_cube(...)` | `void` | Draw detailed custom 3D cube over target entity. |
+| `renderer:draw_cube_simple(...)` | `void` | Draw simple 3D cube over entity with texture. |
+| `renderer:draw_target_esp(...)` | `void` | Draw native client target ESP rings/box. |
+| `renderer:update_target_esp()` | `void` | Refreshes active client target ESP settings. |
+
+<CodeGroup>
+  ```lua Render Blur Example
+  function on_render()
+      local color_bg = renderer:rgba(15, 15, 20, 180)
+      local color_text = renderer:get_client_primary_color()
+
+      renderer:prepare_blur(8.0)
+      renderer:draw_blur(50, 50, 200, 100, 12)
+      renderer:draw_rect_rounding(50, 50, 200, 100, 12, color_bg)
+      renderer:draw_text_centered_in_rect("Floral", 50, 50, 200, 100, color_text, 1.2)
+  end
+  ```
+</CodeGroup>
+
+---
+
+## `minecraft` (Game state & world data)
+
+Access live Minecraft state, entity metrics, keybinds, and status effects.
+
+### Core Game State
+
+| Method | Return Type | Description |
+| :--- | :--- | :--- |
+| `minecraft:is_in_world()` | `boolean` | Checks if player is connected to a world or server. |
+| `minecraft:is_chat_open()` | `boolean` | Checks if chat screen is currently open. |
+| `minecraft:get_fps()` | `int` | Current frames per second. |
+| `minecraft:get_ping()` | `int` | Current network latency (ms). |
+| `minecraft:get_username()` | `String` | Local player account username. |
+| `minecraft:get_server_ip()` | `String` | Current multiplayer server IP (returns `"Singleplayer"` in local worlds). |
+| `minecraft:screen_width()` | `int` | Game window width in pixels. |
+| `minecraft:screen_height()` | `int` | Game window height in pixels. |
+| `minecraft:get_key_name(keyCode)` | `String` | Gets readable name of key based on its LWJGL scan code. |
+
+### Player & Entity Data
+
+| Method | Return Type | Description |
+| :--- | :--- | :--- |
+| `minecraft:get_local_player()` | `LivingEntity` | Local player entity reference. |
+| `minecraft:get_target_entity()` | `LivingEntity` | Entity currently targeted in crosshair. |
+| `minecraft:get_entities()` | `LivingEntity[]` | Returns array of all loaded entities in render distance. |
+| `minecraft:get_entity_name(entity)` | `String` | Display name of target entity. |
+| `minecraft:get_entity_hp(entity)` | `float` | Current health points of entity. |
+| `minecraft:get_entity_max_hp(entity)` | `float` | Maximum health points of entity. |
+| `minecraft:get_entity_skin(entity)` | `String` | Texture identifier or skin URL. |
+| `minecraft:get_entity_x/y/z(entity)` | `float` | Current world coordinates `(X, Y, Z)`. |
+| `minecraft:get_entity_prev_x/y/z(entity)` | `float` | Previous frame coordinates for interpolation. |
+| `minecraft:get_entity_width/height(entity)` | `float` | Entity bounding box dimensions. |
+| `minecraft:is_entity_player(entity)` | `boolean` | Checks if targeted entity is a player. |
+| `minecraft:is_entity_alive(entity)` | `boolean` | Checks if the specified entity object is currently alive. |
+
+### Movement & Actions
+
+| Method | Return Type | Description |
+| :--- | :--- | :--- |
+| `minecraft:get_time_since_jump()` | `double` | Elapsed time since local player's last jump in seconds. |
+| `minecraft:get_recent_hits()` | `table[]` | Array of recent entity hit records. Structure: `{ x = double, y = double, z = double, is_critical = boolean, age = double }`. |
+| `minecraft:get_recent_swings()` | `table[]` | Array of recent weapon swings (misses). Structure: `{ x = double, y = double, z = double, age = double }`. |
+
+---
+
+## Extended HUD Data APIs
+
+### Keybinds & Active Modules
+
+<CodeGroup>
+  ```lua Keybinds & Modules
+  local keybinds = minecraft:get_keybinds()
+  -- Array of tables: { name = string, key = string, enabled = boolean, category = string }
+
+  local active_modules = minecraft:get_active_modules()
+  -- Array of active module objects
+  ```
+</CodeGroup>
+
+### Status Effects (Potions)
+
+<CodeGroup>
+  ```lua Active Potions
+  local potions = minecraft:get_active_potions()
+  -- Structure per entry:
+  -- {
+  --   name = string,
+  --   amplifier = int,
+  --   duration = string,
+  --   duration_ticks = int,
+  --   color = int,
+  --   is_ambient = boolean
+  -- }
+  ```
+</CodeGroup>
+
+### Item Cooldowns
+
+<CodeGroup>
+  ```lua Cooldowns
+  local cooldowns = minecraft:get_active_cooldowns()
+  -- Structure per entry:
+  -- {
+  --   name = string,
+  --   progress = float,
+  --   item_id = string
+  -- }
+  ```
+</CodeGroup>

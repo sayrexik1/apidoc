@@ -1,0 +1,147 @@
+---
+title: "TargetESP Module"
+description: "Пример создания 3D ESP эффекта вращающихся дуг вокруг цели в мире Minecraft."
+---
+
+Модуль **Lua TargetESP** выполняет 3D-рендеринг в игровом мире, отрисовывая вращающиеся кольца/дуги вокруг цели в прицеле с использованием тригонометрии, волновых колебаний по оси Y и 3D-текстурированных квадратов (`draw_textured_quad_3d`).
+
+## Особенности скрипта
+
+- **3D World Render Event**: Подписка на событие рендеринга мира `on_world_render(function(event) ... end)`.
+- **Интерполяция кадров**: Точный расчет положения сущности с учетом промежуточного кадра `frameDepth` (`prev_x + (x - prev_x) * frameDepth`).
+- **Биллбординг камеры**: Ориентация 3D-частиц на камеру игрока с помощью векторов камеры `renderer:get_camera_vectors(wr)`.
+- **Интерактивные слайдеры**: Настройка скорости вращения (`Rotation Speed`) и размера частиц (`Size`).
+
+## Исходный код `targetesp.lua`
+
+<CodeGroup>
+  ```lua targetesp.lua
+  -- Регистрация модуля в категории VISUALS
+  local module = client:register_module("Lua TargetESP", "2 ровно вращающиеся дуги одного радиуса с плавной волной по Y", "VISUALS")
+
+  -- Настройки модуля (слайдеры скорости, размера частиц и чекбокс цвета темы)
+  local speed_slider = module:add_slider("Rotation Speed", "Скорость вращения", 0.1, 10.0, 2.5, 0.1)
+  local particle_size = module:add_slider("Size", "Размер частиц", 0.2, 0.5, 0.35, 0.05)
+  local use_theme_color = module:add_checkbox("Use Theme Color", "Использовать цвет темы клиента", true)
+
+  -- Переменные фаз анимации и прозрачности
+  local rotPhase = 0.0
+  local pulsePhase = 0.0
+  local targetAlpha = 0.0
+
+  -- Математические функции для быстрого вызова
+  local sin = math.sin
+  local cos = math.cos
+  local rad = math.rad
+  local floor = math.floor
+
+  -- Обработчик события 3D-рендеринга мира
+  module:on_world_render(function(event)
+      -- Получение цели в прицеле
+      local target = minecraft:get_target_entity()
+      
+      -- Тестирование в чате на локальном игроке
+      if target == nil and minecraft:is_chat_open() then
+          target = minecraft:get_local_player()
+      end
+
+      -- Плавная анимация прозрачности (Fade In / Fade Out)
+      if target and minecraft:is_entity_alive(target) then
+          targetAlpha = math.min(1.0, targetAlpha + 0.12)
+          rotPhase = rotPhase + speed_slider:getValue() * 1.5
+          pulsePhase = pulsePhase + 0.1 * 0.04
+      else
+          targetAlpha = math.max(0.0, targetAlpha - 0.18)
+      end
+
+      -- Выход при отсутствии цели или полной прозрачности
+      if targetAlpha <= 0.001 or not target then return end
+
+      local wr = event:worldRenderer()
+      
+      -- Интерполяция координат сущности с учетом тика кадра (frameDepth)
+      local frameDepth = event:frameDepth()
+      local rx = minecraft:get_entity_prev_x(target) + (minecraft:get_entity_x(target) - minecraft:get_entity_prev_x(target)) * frameDepth
+      local ry = minecraft:get_entity_prev_y(target) + (minecraft:get_entity_y(target) - minecraft:get_entity_prev_y(target)) * frameDepth
+      local rz = minecraft:get_entity_prev_z(target) + (minecraft:get_entity_z(target) - minecraft:get_entity_prev_z(target)) * frameDepth
+
+      local targetHeight = minecraft:get_entity_height(target)
+      local baseRadius = minecraft:get_entity_width(target) * 1.0
+
+      -- Векторы камеры игрока для поворота частиц (Billboard alignment)
+      local camera = renderer:get_camera_vectors(wr)
+      local rxX, rxY, rxZ = camera[1], camera[2], camera[3]
+      local ruX, ruY, ruZ = camera[4], camera[5], camera[6]
+
+      local isTheme = use_theme_color:getValue()
+      local disableWalls = false
+      local pSize = particle_size:getValue()
+      local halfP = pSize * 0.5
+
+      -- Синусоидальное смещение по оси Y (волна вверх-вниз)
+      local yAmp = 1.0 * (targetHeight * 0.4)
+      local yWaveOffset = sin(pulsePhase * 2.0) * yAmp
+
+      local centerY = ry + (targetHeight * 0.5) + yWaveOffset
+
+      local arcAngleSpan = 120.0
+      local segmentsPerArc = 18
+
+      -- Две противоположные дуги (0 градусов и 180 градусов)
+      local arcs = {
+          { offset = 0.0, idx = 1 },
+          { offset = 180.0, idx = 2 }
+      }
+
+      -- Отрисовка сегментов дуг в 3D пространстве
+      for _, arc in ipairs(arcs) do
+          for s = 0, segmentsPerArc - 1 do
+              local localAngle = (arcAngleSpan / (segmentsPerArc - 1)) * s
+              local angle = rotPhase + arc.offset + localAngle
+              local r = rad(angle)
+
+              -- Координаты отдельной частицы на окружности
+              local px = rx + sin(r) * baseRadius
+              local py = centerY + sin(r * 2.0 + pulsePhase) * (yAmp * 0.15)
+              local pz = rz + cos(r) * baseRadius
+
+              -- Сглаживание прозрачности по краям дуги
+              local edgeFactor = sin((s / (segmentsPerArc - 1)) * 3.14159)
+              local alphaByte = floor((170 + 85 * sin(pulsePhase * 3.0)) * targetAlpha * edgeFactor)
+
+              if alphaByte > 1 then
+                  local col
+                  if isTheme then
+                      col = renderer:get_client_primary_color_alpha(alphaByte)
+                  else
+                      if arc.idx == 1 then
+                          col = renderer:rgba(255, floor(140 + 100 * sin(r)), 50, alphaByte)
+                      else
+                          col = renderer:rgba(50, floor(180 + 75 * cos(r)), 255, alphaByte)
+                      end
+                  end
+
+                  local curHalf = halfP * (0.75 + 0.25 * edgeFactor)
+                  local dxR, dyR, dzR = rxX * curHalf, rxY * curHalf, rxZ * curHalf
+                  local dxU, dyU, dzU = ruX * curHalf, ruY * curHalf, ruZ * curHalf
+
+                  -- Отрисовка 3D текстурированного квадрата частицы (Bloom particle)
+                  renderer:draw_textured_quad_3d(
+                      wr, "bloom",
+                      px - dxR - dxU, py - dyR - dyU, pz - dzR - dzU,
+                      px + dxR - dxU, py + dyR - dyU, pz + dzR - dzU,
+                      px + dxR + dxU, py + dyR + dyU, pz + dzR + dzU,
+                      px - dxR + dxU, py - dyR + dyU, pz - dzR + dzU,
+                      0, 0, 1, 0, 1, 1, 0, 1,
+                      col, true, disableWalls
+                  )
+              end
+          end
+      end
+  end)
+  ```
+</CodeGroup>
+
+<Tip>
+  Сохраните файл `targetesp.lua` в `.minecraft/config/floral/scripts/`. Модуль появится в меню клиента во вкладке **VISUALS**.
+</Tip>

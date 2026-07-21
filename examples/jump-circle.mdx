@@ -1,0 +1,142 @@
+---
+title: "Jump Circle Module"
+description: "Пример рендеринга затухающего 3D круга под ногами игрока в месте прыжка."
+---
+
+Модуль **Jump Circle** отслеживает момент прыжка локального игрока и отрисовывает расширяющуюся текстуру круга на земле (под ногами игрока) с плавным исчезновением.
+
+## Особенности скрипта
+
+- **Отслеживание прыжка**: Использует метод `minecraft:get_time_since_jump()`.
+- **Затухание и масштабирование**: Масштабирует радиус круга со временем и гасит его непрозрачность.
+- **Интеграция с миром**: Накладывает текстуру на землю по координате `Y` прыжка с небольшим смещением для избежания мерцания текстуры (z-fighting).
+
+## Исходный код `circles.lua`
+
+<CodeGroup>
+  ```lua circles.lua
+  -- Регистрация модуля в категории VISUALS
+  local module = client:register_module("Jump Circle", "Отображает картинку под ногами игрока в месте прыжка", "VISUALS")
+
+  -- Слайдер длительности анимации и чекбокс цвета темы
+  local duration_setting = module:add_slider("Duration", "Длительность (сек)", 0.2, 3.0, 1.0, 0.1)
+  local use_theme_color = module:add_checkbox("Use Theme Color", "Цвет темы клиента", true)
+
+  local imageLoaded = false
+  local imageName = "circle"
+  local localFile = "circle.png"
+
+  local lastTime = 99999.0
+  local lastSpawnTime = 0.0
+  local lastFrameTime = 0.0
+  local activeJumps = {}
+
+  -- Событие включения модуля
+  module:setOnEnable(function()
+      activeJumps = {}
+      lastFrameTime = os.clock()
+      if not imageLoaded then
+          imageLoaded = client:load_texture(imageName, localFile)
+      end
+  end)
+
+  -- Событие рендеринга 3D мира
+  module:on_world_render(function(event)
+      if not minecraft:is_in_world() then 
+          activeJumps = {}
+          return 
+      end
+
+      if not imageLoaded then
+          imageLoaded = client:load_texture(imageName, localFile)
+      end
+
+      -- Delta Time (время между текущим и прошлым кадрами рендера)
+      local timeSinceJump = minecraft:get_time_since_jump()
+      local currentTime = os.clock()
+      local dt = 0.0
+      if lastFrameTime > 0.0 then
+          dt = currentTime - lastFrameTime
+      end
+      lastFrameTime = currentTime
+
+      -- Проверка прыжка (время после прыжка резко уменьшилось)
+      if timeSinceJump < lastTime and timeSinceJump < 0.15 and (currentTime - lastSpawnTime > 0.25) then
+          local localPlayer = minecraft:get_local_player()
+          if localPlayer then
+              local jX = minecraft:get_entity_x(localPlayer)
+              local jY = minecraft:get_entity_y(localPlayer)
+              local jZ = minecraft:get_entity_z(localPlayer)
+              -- Добавление нового круга на землю
+              table.insert(activeJumps, { x = jX, y = jY, z = jZ, elapsed = 0.0 })
+              lastSpawnTime = currentTime
+          end
+      end
+      lastTime = timeSinceJump
+
+      local duration = duration_setting:getValue()
+      local maxRadius = 3.0
+      local useTheme = use_theme_color:getValue()
+      local disableWalls = false
+      local wr = event:worldRenderer()
+
+      -- Рендеринг всех активных кругов
+      for i = #activeJumps, 1, -1 do
+          local jump = activeJumps[i]
+          jump.elapsed = jump.elapsed + dt
+
+          -- Удаление круга после завершения времени анимации
+          if jump.elapsed >= duration then
+              table.remove(activeJumps, i)
+          else
+              local progress = jump.elapsed / duration
+              
+              local alpha = 1.0
+              local fadeInPct = 0.10
+
+              -- Плавное появление (Fade In)
+              if progress < fadeInPct then
+                  alpha = progress / fadeInPct
+              else
+                  -- Плавное исчезновение по косинусу (Fade Out)
+                  local fadeProgress = (progress - fadeInPct) / (1.0 - fadeInPct)
+                  alpha = 0.5 + 0.5 * math.cos(fadeProgress * 3.14159)
+              end
+
+              if alpha < 0.0 then alpha = 0.0 end
+              if alpha > 1.0 then alpha = 1.0 end
+
+              -- Увеличение радиуса круга
+              local radiusProgress = math.sin(progress * 1.57079)
+              local currentRadius = maxRadius * radiusProgress
+
+              local alphaByte = math.floor(alpha * 255)
+              local col
+              if useTheme then
+                  col = renderer:get_client_primary_color_alpha(alphaByte)
+              else
+                  col = renderer:rgba(255, 255, 255, alphaByte)
+              end
+
+              -- Небольшое смещение вверх по оси Y во избежание Z-fighting (мерцания на блоках)
+              local rY = jump.y + 0.015
+
+              -- Отрисовка горизонтального текстурированного квада на поверхности земли
+              renderer:draw_textured_quad_3d(
+                  wr, imageName,
+                  jump.x - currentRadius, rY, jump.z - currentRadius,
+                  jump.x + currentRadius, rY, jump.z - currentRadius,
+                  jump.x + currentRadius, rY, jump.z + currentRadius,
+                  jump.x - currentRadius, rY, jump.z + currentRadius,
+                  0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0,
+                  col, false, disableWalls
+              )
+          end
+      end
+  end)
+  ```
+</CodeGroup>
+
+<Note>
+  Скрипт требует наличия файла `circle.png` в папке скриптов. Рекомендуется использовать прозрачное кольцо с размытыми краями.
+</Note>

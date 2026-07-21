@@ -1,0 +1,142 @@
+---
+title: "Jump Circle Module"
+description: "Example rendering of a expanding, fading 3D circle on the ground beneath the player upon jumping."
+---
+
+The **Jump Circle** module tracks the jump events of the local player and renders an expanding circle texture flat on the ground where the jump was initiated, fading it out smoothly.
+
+## Features
+
+- **Jump Detection**: Utilizes `minecraft:get_time_since_jump()`.
+- **Scaling & Fade-out**: Animates the circle radius outwards and fades out its opacity over time.
+- **Z-Fighting Prevention**: Positions the horizontal quad slightly above the ground coordinates (`Y + 0.015`) to avoid block texture flickering.
+
+## Source Code `circles.lua`
+
+<CodeGroup>
+  ```lua circles.lua
+  -- Register module in VISUALS category
+  local module = client:register_module("Jump Circle", "Displays image flat on ground upon player jump", "VISUALS")
+
+  -- Menu configuration settings
+  local duration_setting = module:add_slider("Duration", "Duration (seconds)", 0.2, 3.0, 1.0, 0.1)
+  local use_theme_color = module:add_checkbox("Use Theme Color", "Use client theme color", true)
+
+  local imageLoaded = false
+  local imageName = "circle"
+  local localFile = "circle.png"
+
+  local lastTime = 99999.0
+  local lastSpawnTime = 0.0
+  local lastFrameTime = 0.0
+  local activeJumps = {}
+
+  -- Module activation callback
+  module:setOnEnable(function()
+      activeJumps = {}
+      lastFrameTime = os.clock()
+      if not imageLoaded then
+          imageLoaded = client:load_texture(imageName, localFile)
+      end
+  end)
+
+  -- 3D World rendering callback
+  module:on_world_render(function(event)
+      if not minecraft:is_in_world() then 
+          activeJumps = {}
+          return 
+      end
+
+      if not imageLoaded then
+          imageLoaded = client:load_texture(imageName, localFile)
+      end
+
+      -- Delta-time calculation
+      local timeSinceJump = minecraft:get_time_since_jump()
+      local currentTime = os.clock()
+      local dt = 0.0
+      if lastFrameTime > 0.0 then
+          dt = currentTime - lastFrameTime
+      end
+      lastFrameTime = currentTime
+
+      -- Jump detection logic
+      if timeSinceJump < lastTime and timeSinceJump < 0.15 and (currentTime - lastSpawnTime > 0.25) then
+          local localPlayer = minecraft:get_local_player()
+          if localPlayer then
+              local jX = minecraft:get_entity_x(localPlayer)
+              local jY = minecraft:get_entity_y(localPlayer)
+              local jZ = minecraft:get_entity_z(localPlayer)
+              -- Push new jump location flat circle coordinate
+              table.insert(activeJumps, { x = jX, y = jY, z = jZ, elapsed = 0.0 })
+              lastSpawnTime = currentTime
+          end
+      end
+      lastTime = timeSinceJump
+
+      local duration = duration_setting:getValue()
+      local maxRadius = 3.0
+      local useTheme = use_theme_color:getValue()
+      local disableWalls = false
+      local wr = event:worldRenderer()
+
+      -- Draw active jump circle quads
+      for i = #activeJumps, 1, -1 do
+          local jump = activeJumps[i]
+          jump.elapsed = jump.elapsed + dt
+
+          -- Clear circles exceeding animation duration
+          if jump.elapsed >= duration then
+              table.remove(activeJumps, i)
+          else
+              local progress = jump.elapsed / duration
+              
+              local alpha = 1.0
+              local fadeInPct = 0.10
+
+              -- Fade In
+              if progress < fadeInPct then
+                  alpha = progress / fadeInPct
+              else
+                  -- Cosine-smoothed Fade Out
+                  local fadeProgress = (progress - fadeInPct) / (1.0 - fadeInPct)
+                  alpha = 0.5 + 0.5 * math.cos(fadeProgress * 3.14159)
+              end
+
+              if alpha < 0.0 then alpha = 0.0 end
+              if alpha > 1.0 then alpha = 1.0 end
+
+              -- Expand radius
+              local radiusProgress = math.sin(progress * 1.57079)
+              local currentRadius = maxRadius * radiusProgress
+
+              local alphaByte = math.floor(alpha * 255)
+              local col
+              if useTheme then
+                  col = renderer:get_client_primary_color_alpha(alphaByte)
+              else
+                  col = renderer:rgba(255, 255, 255, alphaByte)
+              end
+
+              -- Offset slightly on Y-axis to prevent Z-fighting flickering on blocks
+              local rY = jump.y + 0.015
+
+              -- Draw horizontal 3D quad flat on ground surface
+              renderer:draw_textured_quad_3d(
+                  wr, imageName,
+                  jump.x - currentRadius, rY, jump.z - currentRadius,
+                  jump.x + currentRadius, rY, jump.z - currentRadius,
+                  jump.x + currentRadius, rY, jump.z + currentRadius,
+                  jump.x - currentRadius, rY, jump.z + currentRadius,
+                  0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0,
+                  col, false, disableWalls
+              )
+          end
+      end
+  end)
+  ```
+</CodeGroup>
+
+<Note>
+  Ensure `circle.png` is placed in the scripts directory. A ring texture with soft edges works best.
+</Note>

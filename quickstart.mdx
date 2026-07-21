@@ -1,47 +1,63 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Быстрый старт"
+description: "Начните создавать собственные Lua-скрипты и HUD-модули для Floral за считанные минуты."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
+## Требования
 
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
+Убедитесь, что у вас установлен и запущен **Floral**. Скриптинг работает прямо из коробки и не требует установки сборщиков или внешних утилит.
 
-## Prerequisites
+## Структура директорий
 
-Before you begin, you must have:
+Все пользовательские скрипты Lua располагаются в следующей папке:
 
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
+```text
+.minecraft/config/floral/scripts/
+```
 
-## Get started
+<Note>
+  **Hot Reloading**: Каждое сохранение файла `.lua` мгновенно перезагружает скрипт прямо в запущенном клиенте.
+</Note>
+
+## Создание первого модуля
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
-
-    ```bash
-    npm install your-package
-    ```
+  <Step title="Перейдите в папку скриптов">
+    Откройте директорию `.minecraft/config/floral/scripts/` на вашем компьютере.
   </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
-
-    ```bash
-    your-cli init
-    ```
+  <Step title="Создайте Lua-файл">
+    Создайте текстовый файл `my_hud_module.lua`.
   </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+  <Step title="Добавьте исходный код">
+    Вставьте пример кода для регистрации HUD-модуля:
 
-    ```bash
-    your-cli start
-    ```
+    <CodeGroup>
+      ```lua my_hud_module.lua
+      -- Регистрация модуля в категории HUD
+      local module = client:register_module("Custom HUD", "Отображает FPS и ник игрока", "HUD")
+
+      -- Главный цикл рендеринга
+      function on_render()
+          if not minecraft:is_in_world() then return end
+
+          local color_bg = renderer:rgba(15, 15, 20, 180)
+          local color_primary = renderer:get_client_primary_color()
+          local text_info = "FPS: " .. tostring(minecraft:get_fps()) .. " | User: " .. minecraft:get_username()
+
+          -- Отрисовка блюра, фона и текста
+          renderer:prepare_blur(6.0)
+          renderer:draw_blur(10, 10, 220, 34, 8)
+          renderer:draw_rect_rounding(10, 10, 220, 34, 8, color_bg)
+          renderer:draw_text_centered_in_rect(text_info, 10, 10, 220, 34, color_primary, 1.0)
+      end
+      ```
+    </CodeGroup>
+  </Step>
+  <Step title="Проверьте результат в игре">
+    Сохраните файл `Ctrl + S`. Floral мгновенно активирует ваш новый модуль в игре!
   </Step>
 </Steps>
 
 <Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
-
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
+  Перейдите к [Спецификации Lua API](/lua-api), чтобы узнать обо всех доступных функциях отрисовки текста, текстур, блюра и получения игровых данных.
 </Tip>

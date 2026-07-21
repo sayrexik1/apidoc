@@ -1,0 +1,425 @@
+---
+title: "Спецификация Lua API"
+description: "Полное справочное руководство по модулям системного управления, рендеринга, состояния игры и HUD для Floral."
+---
+
+Lua API в **Floral** позволяет создавать пользовательские модули, отрисовывать 2D/3D графику, добавлять текст и эффекты размытия, а также получать информацию о мире Minecraft в реальном времени.
+
+<CardGroup cols={3}>
+  <Card title="client" icon="sliders-horizontal" href="#client-системное-управление-и-ресурсы">
+    Регистрация модулей, загрузка локальных и удаленных текстур, управление файлами.
+  </Card>
+  <Card title="renderer" icon="palette" href="#renderer-2d--3d-рендеринг">
+    Создание цветов, текст, формы, размытие, масштабирование и 3D-текстурированные квадраты.
+  </Card>
+  <Card title="minecraft" icon="gamepad-2" href="#minecraft-состояние-игры-и-данные-мира">
+    Статус игрока, параметры сущностей, активные зелья, бинды клавиш и перезарядки.
+  </Card>
+</CardGroup>
+
+---
+
+## `client` (Системное управление и ресурсы)
+
+Модуль `client` отвечает за регистрацию пользовательских модулей и загрузку текстур или файлов.
+
+### Методы
+
+<AccordionGroup>
+  <Accordion title="client:register_module(name, description, category)" defaultOpen>
+    Регистрирует новый модуль клиента.
+
+    - **Параметры**:
+      - `name` *(string)*: Название модуля в настройках клиента.
+      - `description` *(string)*: Краткое описание функционала модуля.
+      - `category` *(string)*: Категория (`"VISUALS"`, `"HUD"`, `"TOOLS"`).
+    - **Возвращает**: Объект `LuaModule`.
+
+    <CodeGroup>
+      ```lua Регистрация модуля
+      local my_module = client:register_module("My Module", "Custom Lua script", "HUD")
+      ```
+    </CodeGroup>
+  </Accordion>
+
+  <Accordion title="client:load_texture(textureName, filename)">
+    Загружает локальную текстуру (PNG, JPG, SVG) в память.
+
+    - **Параметры**:
+      - `textureName` *(string)*: Идентификатор текстуры.
+      - `filename` *(string)*: Относительный путь к файлу в директории скрипта.
+    - **Возвращает**: `boolean` (`true` при успехе).
+
+    <CodeGroup>
+      ```lua Загрузка локальной текстуры
+      local success = client:load_texture("custom_logo", "assets/logo.png")
+      ```
+    </CodeGroup>
+  </Accordion>
+
+  <Accordion title="client:load_texture_url(textureName, url)">
+    Загружает текстуру напрямую по HTTP/HTTPS URL.
+
+    - **Параметры**:
+      - `textureName` *(string)*: Уникальный идентификатор текстуры.
+      - `url` *(string)*: Прямая ссылка на изображение.
+    - **Возвращает**: `boolean` (`true` при успехе).
+
+    <CodeGroup>
+      ```lua Загрузка по URL
+      client:load_texture_url("avatar", "https://example.com/avatar.png")
+      ```
+    </CodeGroup>
+  </Accordion>
+
+  <Accordion title="client:download_file(url, localFilename)">
+    Скачивает удаленный файл в папку скриптов.
+
+    - **Параметры**:
+      - `url` *(string)*: Ссылка на файл.
+      - `localFilename` *(string)*: Путь для сохранения относительно директории скриптов.
+    - **Возвращает**: `boolean` (`true` при успехе).
+
+    <CodeGroup>
+      ```lua Скачивание файла
+      client:download_file("https://example.com/config.json", "config.json")
+      ```
+    </CodeGroup>
+  </Accordion>
+</AccordionGroup>
+
+### `LuaModule` & Settings API
+
+Объект `LuaModule` возвращается при регистрации модуля через `client:register_module()`. Он позволяет настраивать параметры модуля и подписываться на игровые события рендеринга.
+
+#### Методы `LuaModule`
+
+<AccordionGroup>
+  <Accordion title="module:add_slider(name, description, min, max, default, step)">
+    Добавляет ползунок (слайдер) настроек в меню модуля.
+
+    - **Параметры**:
+      - `name` *(string)*: Название настройки.
+      - `description` *(string)*: Описание настройки.
+      - `min` *(float)*: Минимальное значение ползунка.
+      - `max` *(float)*: Максимальное значение ползунка.
+      - `default` *(float)*: Начальное значение.
+      - `step` *(float)*: Шаг изменения значения.
+    - **Возвращает**: Объект `SliderSetting`.
+
+    ```lua
+    local speed_slider = module:add_slider("Speed", "Скорость вращения", 0.1, 10.0, 2.5, 0.1)
+    ```
+  </Accordion>
+
+  <Accordion title="module:add_checkbox(name, description, default)">
+    Добавляет переключатель (флажок) настроек в меню модуля.
+
+    - **Параметры**:
+      - `name` *(string)*: Название настройки.
+      - `description` *(string)*: Описание настройки.
+      - `default` *(boolean)*: Начальное состояние (`true` / `false`).
+    - **Возвращает**: Объект `CheckboxSetting`.
+
+    ```lua
+    local use_blur = module:add_checkbox("Blur", "Размывать фон подложки", true)
+    ```
+  </Accordion>
+
+  <Accordion title="module:add_mode(name, description, optionsTable, default)">
+    Добавляет переключатель режимов (выпадающий список) настроек.
+
+    - **Параметры**:
+      - `name` *(string)*: Название настройки.
+      - `description` *(string)*: Описание настройки.
+      - `optionsTable` *(table)*: Массив строк с названиями режимов.
+      - `default` *(string)*: Режим по умолчанию.
+    - **Возвращает**: Объект `RadioSetting`.
+
+    ```lua
+    local mode = module:add_mode("ESP Mode", "Режим подсветки", {"Box", "Outline", "Chams"}, "Box")
+    ```
+  </Accordion>
+
+  <Accordion title="module:add_color(name, description, defaultRgba)">
+    Добавляет настройку выбора цвета (палитру).
+
+    - **Параметры**:
+      - `name` *(string)*: Название настройки.
+      - `description` *(string)*: Описание настройки.
+      - `defaultRgba` *(int)*: Packed RGBA цвет по умолчанию.
+    - **Возвращает**: Объект `ColorSetting`.
+
+    ```lua
+    local color = module:add_color("ESP Color", "Цвет подсветки", renderer:rgba(255, 0, 0, 255))
+    ```
+  </Accordion>
+
+  <Accordion title="module:add_bind(name, description, defaultKeyCode)">
+    Добавляет настройку привязки клавиши (биндов).
+
+    - **Параметры**:
+      - `name` *(string)*: Название настройки.
+      - `description` *(string)*: Описание настройки.
+      - `defaultKeyCode` *(int)*: Код клавиши по умолчанию (из LWJGL).
+    - **Возвращает**: Объект `BindSetting`.
+
+    ```lua
+    local bind = module:add_bind("Toggle Key", "Клавиша активации", 57) -- 57 = SPACE
+    ```
+  </Accordion>
+
+  <Accordion title="module:add_input(name, description, default)">
+    Добавляет поле текстового ввода настроек.
+
+    - **Параметры**:
+      - `name` *(string)*: Название настройки.
+      - `description` *(string)*: Описание настройки.
+      - `default` *(string)*: Значение по умолчанию.
+    - **Возвращает**: Объект `InputSetting`.
+
+    ```lua
+    local text_input = module:add_input("Custom Text", "Текст для вывода", "Floral Dev")
+    ```
+  </Accordion>
+
+  <Accordion title="module:setOnEnable(function)">
+    Регистрирует callback-функцию, срабатывающую при активации (включении) модуля.
+
+    ```lua
+    module:setOnEnable(function()
+        client:load_texture_url("custom_head", "https://example.com/head.png")
+    end)
+    ```
+  </Accordion>
+
+  <Accordion title="module:on_render(function)">
+    Регистрирует callback-функцию для 2D-рендеринга (интерфейса/HUD).
+
+    ```lua
+    module:on_render(function()
+        renderer:draw_text("Hello World", 10, 10, renderer:rgb(255, 255, 255), 1.0)
+    end)
+    ```
+  </Accordion>
+
+  <Accordion title="module:on_world_render(function(event))">
+    Регистрирует callback-функцию для 3D-рендеринга в игровом мире.
+
+    - **Параметры функции**:
+      - `event` *(RenderEvent)*: Объект события 3D рендеринга.
+
+    ```lua
+    module:on_world_render(function(event)
+        local wr = event:worldRenderer()
+        local depth = event:frameDepth()
+        -- код отрисовки 3D эффектов
+    end)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+#### Методы настроек
+
+| Объект | Метод | Возвращает | Описание |
+| :--- | :--- | :--- | :--- |
+| **Все настройки** | `setting:setValue(value)` | `void` | Программно устанавливает новое значение настройки. |
+| `SliderSetting` | `setting:getValue()` | `float` | Возвращает текущее значение ползунка. |
+| `CheckboxSetting` | `setting:getValue()` | `boolean` | Возвращает текущее состояние переключателя. |
+| `RadioSetting` | `setting:getValue()` | `string` | Возвращает название выбранного режима. |
+| `InputSetting` | `setting:getValue()` | `string` | Возвращает введенную строку текста. |
+| `BindSetting` | `setting:getKeyCode()` | `int` | Возвращает текущий код привязанной клавиши. |
+| `BindSetting` | `setting:getKeyName()` | `string` | Возвращает название привязанной клавиши. |
+| `ColorSetting` | `setting:getValue():toRgba()` | `int` | Возвращает текущий цвет в формате Packed RGBA. |
+| `ColorSetting` | `setting:getValue():hue()` | `float` | Hue (оттенок) цвета. |
+| `ColorSetting` | `setting:getValue():saturation()` | `float` | Saturation (насыщенность) цвета. |
+| `ColorSetting` | `setting:getValue():brightness()` | `float` | Brightness (яркость) цвета. |
+| `ColorSetting` | `setting:getValue():alpha()` | `float` | Alpha (прозрачность) цвета. |
+
+#### Событие `RenderEvent`
+
+Передается в функцию `on_world_render`.
+
+| Метод | Возвращает | Описание |
+| :--- | :--- | :--- |
+| `event:worldRenderer()` | `WorldRenderer` | Возвращает объект 3D-рендерера мира для отрисовки геометрии. |
+| `event:frameDepth()` | `float` | Возвращает время промежуточного кадра (partial ticks) для плавной интерполяции позиций. |
+
+---
+
+## `renderer` (2D & 3D рендеринг)
+
+Модуль `renderer` предоставляет функции отрисовки элементов интерфейса, текста, эффектов размытия и 3D-объектов в мире.
+
+### Цвета и шейдеры
+
+| Метод | Возвращает | Описание |
+| :--- | :--- | :--- |
+| `renderer:rgb(r, g, b)` | `int` | Создать RGB цвет (значения 0-255). |
+| `renderer:rgba(r, g, b, a)` | `int` | Создать RGBA цвет с альфа-каналом. |
+| `renderer:get_client_primary_color()` | `int` | Получить основной цвет темы клиента. |
+| `renderer:get_client_primary_color_alpha(alpha)` | `int` | Получить основной цвет темы с прозрачностью. |
+| `renderer:prepare_blur(strength)` | `void` | Подготовить буфер размытия с заданной силой. |
+
+### 2D Отрисовка и текст
+
+| Метод | Описание |
+| :--- | :--- |
+| `renderer:draw_rect(x, y, w, h, color)` | Нарисовать заполненный прямоугольник. |
+| `renderer:draw_rect_rounding(x, y, w, h, rounding, color)` | Прямоугольник с закругленными углами. |
+| `renderer:draw_gradient(x, y, w, h, colorTL, colorTR, colorBR, colorBL)` | Прямоугольник с градиентом по вершинам (Packed RGBA цвета). |
+| `renderer:draw_circle(cx, cy, radius, startDeg, pct, color)` | Заполненный круг или сектор (углы в градусах, `pct` от 0.0 до 1.0). |
+| `renderer:draw_circle_outline(cx, cy, radius, startDeg, pct, thickness, color)` | Контур круга или дуга заданной толщины. |
+| `renderer:draw_shadow(x, y, w, h, rounding, blurStrength, spread, color)` | Мягкая внешняя тень для прямоугольных элементов интерфейса. |
+| `renderer:draw_blur(x, y, w, h, rounding)` | Область размытия с закруглением. |
+| `renderer:draw_blur_alpha(x, y, w, h, rounding, alpha)` | Область размытия с прозрачностью. |
+| `renderer:draw_text(text, x, y, color, size)` | Отрисовка текста по координатам. |
+| `renderer:draw_text_center(text, x, y, color, size)` | Отрисовать текст с выравниванием по центру координат `(x, y)`. |
+| `renderer:draw_text_centered_in_rect(text, x, y, w, h, color, size)` | Текст по центру заданной области. |
+| `renderer:get_text_width(text, size)` → `float` | Рассчитать ширину текста. |
+| `renderer:get_centered_baseline_offset(size)` → `float` | Смещение базовой линии шрифта. |
+| `renderer:draw_texture(textureName, x, y, w, h, color)` | Отрисовка текстуры. |
+| `renderer:draw_texture_centered_in_rect(textureName, rx, ry, rw, rh, destW, destH, color)` | Отрисовка текстуры по центру прямоугольной области. |
+| `renderer:draw_texture_rotated(textureName, x, y, w, h, rotationDegrees, color)` | Отрисовка повернутой текстуры. |
+| `renderer:draw_texture_centered_in_rect_rotated(...)` | Повернутая текстура по центру прямоугольной области. |
+| `renderer:draw_texture_region(textureName, x, y, w, h, u0, v0, u1, v1, color)` | Отрисовка части (региона) текстуры по UV-координатам (0.0 - 1.0). |
+| `renderer:draw_texture_region_rounded(...)` | Отрисовка кадрированной текстуры с закруглением. |
+| `renderer:draw_texture_region_rotated(...)` | Отрисовка повернутой части (региона) текстуры. |
+
+### Трансформации и перетаскивание
+
+| Метод | Возвращает | Описание |
+| :--- | :--- | :--- |
+| `renderer:begin_drag(id, x, y, w, h)` | `DragSession` | Начать сессию перетаскивания элемента. |
+| `renderer:end_drag(session)` | `void` | Завершить сессию перетаскивания. |
+| `renderer:render_drag_outline(session, rounding, scale)` | `void` | Нарисовать рамку вокруг перетаскиваемого HUD-элемента. |
+| `renderer:push_scale(scaleX, scaleY, centerX, centerY)` | `void` | Применить масштабирование относительно центра. |
+| `renderer:pop_scale()` | `void` | Сбросить масштабирование. |
+
+#### Сессия перетаскивания `DragSession`
+
+Возвращается методом `renderer:begin_drag()`. Позволяет реализовать интерактивное перетаскивание HUD-элементов мышкой по экрану.
+
+| Метод | Возвращает | Описание |
+| :--- | :--- | :--- |
+| `session:positionX()` | `float` | Возвращает текущую координату X перетаскиваемого элемента. |
+| `session:positionY()` | `float` | Возвращает текущую координату Y перетаскиваемого элемента. |
+| `session:dragging()` | `boolean` | Возвращает `true`, если элемент перетаскивается в данный момент. |
+
+### 3D Рендеринг
+
+| Метод | Возвращает | Описание |
+| :--- | :--- | :--- |
+| `renderer:get_camera_vectors(worldRenderer)` | `float[]` | Получить векторы камеры `[rxX, rxY, rxZ, ruX, ruY, ruZ]`. |
+| `renderer:draw_quad_3d(...)` | `void` | Отрисовка залитого 3D-полигона (4 вершины в мире) без текстуры. |
+| `renderer:draw_textured_quad_3d(...)` | `void` | Отрисовка 3D текстурированного квадрата в мире. |
+| `renderer:draw_cube(...)` | `void` | Отрисовка детализированного куба (повороты, эффекты попадания) над сущностью. |
+| `renderer:draw_cube_simple(...)` | `void` | Отрисовка простого куба над сущностью с текстурой. |
+| `renderer:draw_target_esp(...)` | `void` | Отрисовка нативного эффекта Target ESP клиента вокруг цели. |
+| `renderer:update_target_esp()` | `void` | Обновить состояние Target ESP. |
+
+<CodeGroup>
+  ```lua Пример рендеринга с блюром
+  function on_render()
+      local color_bg = renderer:rgba(15, 15, 20, 180)
+      local color_text = renderer:get_client_primary_color()
+
+      renderer:prepare_blur(8.0)
+      renderer:draw_blur(50, 50, 200, 100, 12)
+      renderer:draw_rect_rounding(50, 50, 200, 100, 12, color_bg)
+      renderer:draw_text_centered_in_rect("Floral", 50, 50, 200, 100, color_text, 1.2)
+  end
+  ```
+</CodeGroup>
+
+---
+
+## `minecraft` (Состояние игры и данные мира)
+
+Доступ к состоянию игры, параметрам сущностей, клавишам управления и эффектам.
+
+### Основное состояние игры
+
+| Метод | Тип ответа | Описание |
+| :--- | :--- | :--- |
+| `minecraft:is_in_world()` | `boolean` | Находится ли игрок в мире/на сервере. |
+| `minecraft:is_chat_open()` | `boolean` | Открыт ли игровой чат. |
+| `minecraft:get_fps()` | `int` | Текущий FPS. |
+| `minecraft:get_ping()` | `int` | Текущий пинг (мс). |
+| `minecraft:get_username()` | `String` | Никнейм игрока. |
+| `minecraft:get_server_ip()` | `String` | IP-адрес текущего сервера (возвращает `"Singleplayer"` в одиночной игре). |
+| `minecraft:screen_width()` | `int` | Текущая ширина экрана игры в пикселях. |
+| `minecraft:screen_height()` | `int` | Текущая высота экрана игры в пикселях. |
+| `minecraft:get_key_name(keyCode)` | `String` | Возвращает текстовое имя клавиши по ее LWJGL-коду. |
+
+### Данные игрока и сущностей
+
+| Метод | Тип ответа | Описание |
+| :--- | :--- | :--- |
+| `minecraft:get_local_player()` | `LivingEntity` | Ссылка на объект локального игрока. |
+| `minecraft:get_target_entity()` | `LivingEntity` | Сущность в прицеле. |
+| `minecraft:get_entities()` | `LivingEntity[]` | Возвращает массив всех загруженных сущностей в радиусе прорисовки. |
+| `minecraft:get_entity_name(entity)` | `String` | Имя сущности. |
+| `minecraft:get_entity_hp(entity)` | `float` | Текущее здоровье. |
+| `minecraft:get_entity_max_hp(entity)` | `float` | Максимальное здоровье. |
+| `minecraft:get_entity_skin(entity)` | `String` | Скин/текстура сущности. |
+| `minecraft:get_entity_x/y/z(entity)` | `float` | Координаты `(X, Y, Z)`. |
+| `minecraft:get_entity_prev_x/y/z(entity)` | `float` | Координаты на предыдущем кадре. |
+| `minecraft:get_entity_width/height(entity)` | `float` | Размеры хитбокса. |
+| `minecraft:is_entity_player(entity)` | `boolean` | Проверить, является ли сущность игроком. |
+| `minecraft:is_entity_alive(entity)` | `boolean` | Проверить, жива ли указанная сущность. |
+
+### Движение и события
+
+| Метод | Тип ответа | Описание |
+| :--- | :--- | :--- |
+| `minecraft:get_time_since_jump()` | `double` | Время в секундах, прошедшее с момента последнего прыжка локального игрока. |
+| `minecraft:get_recent_hits()` | `table[]` | Список зарегистрированных ударов по сущностям. Структура: `{ x = double, y = double, z = double, is_critical = boolean, age = double }`. |
+| `minecraft:get_recent_swings()` | `table[]` | Список зарегистрированных взмахов рук (промахов). Структура: `{ x = double, y = double, z = double, age = double }`. |
+
+---
+
+## Расширенные данные HUD
+
+### Клавиши и активные модули
+
+<CodeGroup>
+  ```lua Keybinds & Modules
+  local keybinds = minecraft:get_keybinds()
+  -- Массив таблиц: { name = string, key = string, enabled = boolean, category = string }
+
+  local active_modules = minecraft:get_active_modules()
+  -- Массив объектов активных модулей
+  ```
+</CodeGroup>
+
+### Эффекты зелий
+
+<CodeGroup>
+  ```lua Active Potions
+  local potions = minecraft:get_active_potions()
+  -- Структура элементов:
+  -- {
+  --   name = string,
+  --   amplifier = int,
+  --   duration = string,
+  --   duration_ticks = int,
+  --   color = int,
+  --   is_ambient = boolean
+  -- }
+  ```
+</CodeGroup>
+
+### Перезарядка предметов
+
+<CodeGroup>
+  ```lua Cooldowns
+  local cooldowns = minecraft:get_active_cooldowns()
+  -- Структура элементов:
+  -- {
+  --   name = string,
+  --   progress = float,
+  --   item_id = string
+  -- }
+  ```
+</CodeGroup>

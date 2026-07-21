@@ -1,0 +1,226 @@
+---
+title: "TargetHUD Module"
+description: "Официальный пример создания интерактивного интерфейса TargetHUD на Lua для Floral."
+---
+
+Модуль **Lua TargetHUD** отображает подробную карточку текущей цели в прицеле игрока: анимированную полосу здоровья, урон, аву/скин цели, плавное появление и поддержку перетаскивания (Drag & Drop).
+
+## Возможности скрипта
+
+- **Интерактивные настройки**: Добавление галочек (`add_checkbox`) для размытия фона.
+- **Отрисовка скина цели**: Автоматическое считывание скина игрока или загрузка fallback-аватарки по URL.
+- **Анимации и эффекты**: Плавный рассчет урона (Damage HP), эффект блеска (Shine animation), сегментированная полоса здоровья и плавная анимация появления (Target Alpha).
+- **Drag & Drop**: Поддержка перемещения модуля мышкой по экрану через `renderer:begin_drag`.
+
+## Исходный код `targethud.lua`
+
+<CodeGroup>
+  ```lua targethud.lua
+  -- Регистрация HUD модуля и пользовательских настроек
+  local module = client:register_module("Lua TargetHUD", "Отображает информацию о текущей цели под прицелом", "HUD")
+  local use_blur = module:add_checkbox("Blur Background", "Размывать задний фон подложки", true)
+
+  -- Координаты и переменные состояния анимаций
+  local hudX = 300
+  local hudY = 300
+  local lastTarget = nil
+  local targetAlpha = 0.0
+  local animHp = 0.0
+  local animVelocity = 0.0
+  local animDamageHp = 0.0
+  local animWidth = 180.0
+  local shinePhase = 0.0
+  local fallbackLoaded = false
+
+  -- Ссылка на стандартный скин/аватар при отсутствии скина
+  local fallbackUrl = "https://i.pinimg.com/736x/fb/a8/b9/fba8b95e4a82ebac454df51032c98679.jpg"
+
+  -- Загрузка текстуры при включении модуля
+  module:setOnEnable(function()
+      if not fallbackLoaded then
+          fallbackLoaded = client:load_texture_url("fallback_head", fallbackUrl)
+      end
+  end)
+
+  -- Основной цикл рендеринга модуля
+  module:on_render(function()
+      -- Проверка нахождения игрока в мире
+      if not minecraft:is_in_world() then 
+          targetAlpha = 0.0
+          lastTarget = nil
+          return 
+      end
+
+      -- Резервная загрузка текстуры аватарки
+      if not fallbackLoaded then
+          fallbackLoaded = client:load_texture_url("fallback_head", fallbackUrl)
+      end
+
+      -- Получение сущности в прицеле
+      local target = minecraft:get_target_entity()
+      
+      -- В открытом чате отображаем собственного игрока для теста
+      if target == nil and minecraft:is_chat_open() then
+          target = minecraft:get_local_player()
+      end
+      
+      -- Анимация плавной прозрачности (Fade In / Fade Out)
+      if target == nil or not minecraft:is_entity_alive(target) then
+          targetAlpha = targetAlpha - 0.12
+          if targetAlpha < 0.0 then 
+              targetAlpha = 0.0 
+              lastTarget = nil
+          end
+      else
+          targetAlpha = targetAlpha + 0.15
+          if targetAlpha > 1.0 then targetAlpha = 1.0 end
+          lastTarget = target
+      end
+
+      -- Не отрисовывать при полной прозрачности
+      if targetAlpha <= 0.001 or not lastTarget then return end
+
+      local height = 62
+      local rounding = 12
+
+      -- Получение параметров сущности (Имя, HP, Max HP)
+      local name = minecraft:get_entity_name(lastTarget)
+      local hp = minecraft:get_entity_hp(lastTarget)
+      local maxHp = minecraft:get_entity_max_hp(lastTarget)
+
+      -- Обновление фазы анимации блика
+      shinePhase = (shinePhase + 0.007) % 3.14159
+
+      -- Расчет физики и анимации полосы здоровья (Damage HP & Interp)
+      if animHp == 0.0 or math.abs(animHp - hp) > 12 then
+          animHp = hp
+          animDamageHp = hp
+          animVelocity = 0.0
+      else
+          local force = (hp - animHp) * 0.18
+          animVelocity = (animVelocity + force) * 0.72
+          animHp = animHp + animVelocity
+
+          if animDamageHp < hp then
+              animDamageHp = hp
+          else
+              animDamageHp = animDamageHp + (animHp - animDamageHp) * 0.018
+          end
+      end
+
+      local displayHpInt = math.floor(math.max(0.0, animHp) + 0.5)
+      local hpStr = tostring(displayHpInt) .. " HP"
+
+      -- Динамический расчет ширины плашки в зависимости от длины текста
+      local nameW = renderer:get_text_width(name, 15)
+      local hpTextW = renderer:get_text_width(hpStr, 12.5)
+      
+      local targetWidth = 61 + math.max(85, nameW + hpTextW + 16) + 12
+      
+      if animWidth == 180.0 then
+          animWidth = targetWidth
+      else
+          animWidth = animWidth + (targetWidth - animWidth) * 0.2
+      end
+      local width = animWidth
+
+      -- Обработка сессии перетаскивания (Drag & Drop)
+      local session = renderer:begin_drag("lua.target_hud", hudX, hudY, width, height)
+      hudX = session:positionX()
+      hudY = session:positionY()
+      local x = hudX
+      local y = hudY
+
+      if session:dragging() then
+          renderer:render_drag_outline(session, rounding, 1.0)
+      end
+
+      -- Анимация масштабирования карточки при появлении
+      local scale = 0.85 + 0.15 * targetAlpha
+      local cx = x + width / 2
+      local cy = y + height / 2
+
+      renderer:push_scale(scale, scale, cx, cy)
+
+      -- Настройка цветов элементов
+      local alphaVal = math.floor(targetAlpha * 255)
+      local bgCol = renderer:rgba(10, 10, 10, math.floor(targetAlpha * 215))
+      local textCol = renderer:rgba(255, 255, 255, alphaVal)
+      local hpTextCol = renderer:rgba(220, 220, 220, math.floor(targetAlpha * 180))
+      local themeColor = renderer:get_client_primary_color_alpha(alphaVal)
+      local damageColor = renderer:rgba(235, 60, 60, math.floor(targetAlpha * 190))
+
+      -- Рендеринг шейдера размытия (Blur Shader)
+      if use_blur:getValue() then
+          renderer:prepare_blur(5.0 * targetAlpha)
+          renderer:draw_blur_alpha(x, y, width, height, rounding, targetAlpha)
+      end
+
+      -- Отрисовка фона карточки
+      renderer:draw_rect_rounding(x, y, width, height, rounding, bgCol)
+
+      -- Отрисовка головы/скина цели
+      local skin = minecraft:get_entity_skin(lastTarget)
+      local headSize = 40
+      local headX = x + 11
+      local headY = y + (height - headSize) / 2
+      local headRounding = 6
+
+      renderer:draw_rect_rounding(headX, headY, headSize, headSize, headRounding, renderer:rgba(25, 25, 25, math.floor(targetAlpha * 220)))
+      
+      if skin ~= "" then
+          renderer:draw_texture_region_rounded(skin, headX, headY, headSize, headSize, 0.125, 0.125, 0.25, 0.25, headRounding, renderer:rgba(255, 255, 255, alphaVal))
+          renderer:draw_texture_region_rounded(skin, headX, headY, headSize, headSize, 0.625, 0.125, 0.75, 0.25, headRounding, renderer:rgba(255, 255, 255, alphaVal))
+      else
+          renderer:draw_texture_region_rounded("fallback_head", headX, headY, headSize, headSize, 0.0, 0.0, 1.0, 1.0, headRounding, renderer:rgba(255, 255, 255, alphaVal))
+      end
+
+      -- Выравнивание текста имени и HP
+      local textRowY = y + 17
+      local nameBaselineY = textRowY + renderer:get_centered_baseline_offset(15)
+      local hpBaselineY = textRowY + renderer:get_centered_baseline_offset(12.5)
+
+      renderer:draw_text(name, x + 61, nameBaselineY, textCol, 15)
+      renderer:draw_text(hpStr, x + width - 12 - hpTextW, hpBaselineY, hpTextCol, 12.5)
+
+      -- Отрисовка подложки полосы здоровья
+      local barX = x + 61
+      local barY = y + 38
+      local barW = width - 73
+      local barH = 6
+      local barRounding = 3.0
+
+      renderer:draw_rect_rounding(barX, barY, barW, barH, barRounding, renderer:rgba(30, 30, 30, math.floor(targetAlpha * 160)))
+
+      -- Отрисовка полосы уронa (Damage Bar)
+      local damagePct = math.min(1.0, math.max(0.0, animDamageHp / maxHp))
+      if damagePct > 0.02 then
+          local dmgH = 2.4
+          local dmgY = barY + (barH - dmgH) / 2.0
+          renderer:draw_rect_rounding(barX, dmgY, barW * damagePct, dmgH, 1.2, damageColor)
+      end
+
+      -- Отрисовка основной полосы здоровья и блика (Health Bar & Shine)
+      local hpPct = math.min(1.0, math.max(0.0, animHp / maxHp))
+      if hpPct > 0.02 then
+          renderer:draw_rect_rounding(barX, barY, barW * hpPct, barH, barRounding, themeColor)
+          
+          local shineW = math.min(barW * hpPct, 18.0)
+          local shineX = barX + (barW * hpPct - shineW) * math.sin(shinePhase)
+          renderer:draw_rect_rounding(shineX, barY, shineW, barH, barRounding, renderer:rgba(255, 255, 255, math.floor(targetAlpha * 70)))
+      end
+
+      -- Разделительные сегменты на полосе здоровья
+      local segmentsCount = 10
+      local segGap = (barW) / segmentsCount
+      for i = 1, segmentsCount - 1 do
+          local segX = barX + i * segGap
+          renderer:draw_rect(segX, barY, 1.0, barH, renderer:rgba(10, 10, 10, math.floor(targetAlpha * 230)))
+      end
+
+      -- Завершение трансформаций и сессии перетаскивания
+      renderer:pop_scale()
+      renderer:end_drag(session)
+  end)
+  ```
+</CodeGroup>

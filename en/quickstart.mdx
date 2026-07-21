@@ -1,0 +1,63 @@
+---
+title: "Quickstart"
+description: "Start building custom Lua scripts and HUD modules for Floral in minutes."
+---
+
+## Prerequisites
+
+Ensure you have **Floral** installed and running. Scripting works directly out of the box with zero external build tools required.
+
+## Directory Structure
+
+All custom Lua scripts are located in the client configuration folder:
+
+```text
+.minecraft/config/floral/scripts/
+```
+
+<Note>
+  **Hot Reloading**: Every time you save a `.lua` file, Floral instantly reloads and re-executes the script in-game.
+</Note>
+
+## Creating Your First Module
+
+<Steps>
+  <Step title="Navigate to the scripts directory">
+    Open `.minecraft/config/floral/scripts/` on your system.
+  </Step>
+  <Step title="Create a Lua file">
+    Create a new file named `my_hud_module.lua`.
+  </Step>
+  <Step title="Add sample source code">
+    Insert the sample code below to register a HUD module:
+
+    <CodeGroup>
+      ```lua my_hud_module.lua
+      -- Register a module under the HUD category
+      local module = client:register_module("Custom HUD", "Displays active FPS and username", "HUD")
+
+      -- Main render loop
+      function on_render()
+          if not minecraft:is_in_world() then return end
+
+          local color_bg = renderer:rgba(15, 15, 20, 180)
+          local color_primary = renderer:get_client_primary_color()
+          local text_info = "FPS: " .. tostring(minecraft:get_fps()) .. " | User: " .. minecraft:get_username()
+
+          -- Render shader blur, card background, and text
+          renderer:prepare_blur(6.0)
+          renderer:draw_blur(10, 10, 220, 34, 8)
+          renderer:draw_rect_rounding(10, 10, 220, 34, 8, color_bg)
+          renderer:draw_text_centered_in_rect(text_info, 10, 10, 220, 34, color_primary, 1.0)
+      end
+      ```
+    </CodeGroup>
+  </Step>
+  <Step title="Verify in-game">
+    Save the file (`Ctrl + S`). Floral will instantly activate your new module in-game!
+  </Step>
+</Steps>
+
+<Tip>
+  Check out the complete [Lua API Reference](/en/lua-api) for all available rendering functions, texture loading, and game state methods.
+</Tip>

@@ -1,0 +1,6 @@
+node_modules/
+.mintlify/
+.git/
+*.log
+*.lua
+*.md

@@ -1,0 +1,176 @@
+---
+title: "Hit Bubbles Module"
+description: "Пример рендеринга 3D сфер в точках ударов по сущностям или воздуху."
+---
+
+Модуль **Lua Hit Bubbles** отслеживает недавние удары локального игрока и взмахи оружия в воздухе, после чего рендерит 3D сферы (текстуру круга) в точках удара с постепенным затуханием (Fade Out).
+
+## Особенности скрипта
+
+- **Отслеживание ударов**: Использует функции `minecraft:get_recent_hits()` и `minecraft:get_recent_swings()`.
+- **Плавный расчет времени**: Измеряет время кадра через встроенный метод `os.clock()`.
+- **Элементы управления**: Настройка размера сфер, длительности отображения и переключение режимов.
+
+## Исходный код `bubbles.lua`
+
+<CodeGroup>
+  ```lua bubbles.lua
+  -- Регистрация модуля в категории VISUALS
+  local module = client:register_module("Lua Hit Bubbles", "Отображает 3D сферы/эффекты в точках ударов", "VISUALS")
+
+  -- Настройки интерфейса
+  local show_swings = module:add_checkbox("Show Air Swings", "Показывать при ударе по воздуху", true)
+  local show_hits = module:add_checkbox("Show Enemy Hits", "Показывать при попадании по врагу", true)
+  local use_theme_color = module:add_checkbox("Use Theme Color", "Цвет темы клиента", true)
+  local bubble_size = module:add_slider("Bubble Size", "Размер сфер", 0.1, 1.5, 0.45, 0.05)
+  local bubble_duration = module:add_slider("Duration", "Длительность (сек)", 0.1, 1.5, 0.35, 0.05)
+
+  local imageLoaded = false
+  local imageName = "circle"
+  local localFile = "circle.png"
+
+  local lastHitCount = 0
+  local lastSwingCount = 0
+  local activeBubbles = {}
+  local lastFrameTime = 0.0
+
+  -- Событие включения модуля
+  module:setOnEnable(function()
+      activeBubbles = {}
+      lastFrameTime = os.clock()
+      if not imageLoaded then
+          imageLoaded = client:load_texture(imageName, localFile)
+      end
+  end)
+
+  -- Событие рендеринга 3D мира
+  module:on_world_render(function(event)
+      if not minecraft:is_in_world() then
+          activeBubbles = {}
+          return
+      end
+
+      if not imageLoaded then
+          imageLoaded = client:load_texture(imageName, localFile)
+      end
+
+      -- Вычисление Delta Time (времени между кадрами)
+      local currentTime = os.clock()
+      local dt = 0.0
+      if lastFrameTime > 0.0 then
+          dt = currentTime - lastFrameTime
+      end
+      lastFrameTime = currentTime
+
+      -- Чтение попаданий по целям
+      local hits = minecraft:get_recent_hits()
+      if show_hits:getValue() and #hits > lastHitCount then
+          for i = lastHitCount + 1, #hits do
+              local h = hits[i]
+              table.insert(activeBubbles, {
+                  x = h.x, y = h.y, z = h.z,
+                  elapsed = h.age,
+                  is_crit = h.is_critical,
+                  is_hit = true
+              })
+          end
+      end
+      lastHitCount = #hits
+
+      -- Чтение взмахов рук (промахов по воздуху)
+      local swings = minecraft:get_recent_swings()
+      if show_swings:getValue() and #swings > lastSwingCount then
+          for i = lastSwingCount + 1, #swings do
+              local s = swings[i]
+              local isAlreadyHit = false
+              -- Исключаем дублирование точек, если удар совпал с попаданием
+              for _, b in ipairs(activeBubbles) do
+                  if math.abs(b.x - s.x) < 0.1 and math.abs(b.z - s.z) < 0.1 and b.elapsed < 0.05 then
+                      isAlreadyHit = true
+                      break
+                  end
+              end
+              if not isAlreadyHit then
+                  table.insert(activeBubbles, {
+                      x = s.x, y = s.y, z = s.z,
+                      elapsed = s.age,
+                      is_crit = false,
+                      is_hit = false
+                  })
+              end
+          end
+      end
+      lastSwingCount = #swings
+
+      local maxDuration = bubble_duration:getValue()
+      local baseSize = bubble_size:getValue()
+      local useTheme = use_theme_color:getValue()
+      local wr = event:worldRenderer()
+
+      -- Получение векторов камеры для выравнивания текстур
+      local camera = renderer:get_camera_vectors(wr)
+      local rxX, rxY, rxZ = camera[1], camera[2], camera[3]
+      local ruX, ruY, ruZ = camera[4], camera[5], camera[6]
+
+      -- Отрисовка активных сфер
+      for i = #activeBubbles, 1, -1 do
+          local b = activeBubbles[i]
+          b.elapsed = b.elapsed + dt
+
+          -- Удаление сфер по истечении времени жизни
+          if b.elapsed >= maxDuration then
+              table.remove(activeBubbles, i)
+          else
+              local progress = b.elapsed / maxDuration
+              local sizeProgress = math.sin(progress * 1.57079)
+              local currentSize = baseSize * (0.3 + 0.7 * sizeProgress)
+              if b.is_crit then
+                  currentSize = currentSize * 1.35
+              end
+
+              local alpha = 1.0 - progress
+              if alpha < 0.0 then alpha = 0.0 end
+
+              local alphaByte = math.floor(alpha * 255)
+              local col
+              if b.is_hit then
+                  if useTheme then
+                      col = renderer:get_client_primary_color_alpha(alphaByte)
+                  else
+                      if b.is_crit then
+                          col = renderer:rgba(255, 60, 60, alphaByte)
+                      else
+                          col = renderer:rgba(255, 255, 255, alphaByte)
+                      end
+                  end
+              else
+                  if useTheme then
+                      col = renderer:get_client_primary_color_alpha(math.floor(alpha * 120))
+                  else
+                      col = renderer:rgba(220, 220, 220, math.floor(alpha * 120))
+                  end
+              end
+
+              local half = currentSize * 0.5
+              local dxR, dyR, dzR = rxX * half, rxY * half, rxZ * half
+              local dxU, dyU, dzU = ruX * half, ruY * half, ruZ * half
+
+              -- Рендеринг текстуры сферы с выравниванием на камеру (Billboard)
+              renderer:draw_textured_quad_3d(
+                  wr, imageName,
+                  b.x - dxR - dxU, b.y - dyR - dyU, b.z - dzR - dzU,
+                  b.x + dxR - dxU, b.y - dyR - dyU, b.z + dzR - dzU,
+                  b.x + dxR + dxU, b.y + dyR + dyU, b.z + dzR + dzU,
+                  b.x - dxR + dxU, b.y - dyR + dyU, b.z - dzR + dzU,
+                  0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0,
+                  col, false, false
+              )
+          end
+      end
+  end)
+  ```
+</CodeGroup>
+
+<Note>
+  Для корректного отображения сфер убедитесь, что в папке скриптов находится текстурный файл `circle.png`.
+</Note>
