@@ -8,6 +8,7 @@ The **Jump Circle** module tracks the jump events of the local player and render
 ## Features
 
 - **Jump Detection**: Utilizes `minecraft:get_time_since_jump()`.
+- **Automatic Asset Loading**: If `circle.png` is not found locally, the script automatically downloads it from the official repository via `client:download_file()`.
 - **Scaling & Fade-out**: Animates the circle radius outwards and fades out its opacity over time.
 - **Z-Fighting Prevention**: Positions the horizontal quad slightly above the ground coordinates (`Y + 0.015`) to avoid block texture flickering.
 
@@ -20,6 +21,7 @@ The **Jump Circle** module tracks the jump events of the local player and render
 
   -- Menu configuration settings
   local duration_setting = module:add_slider("Duration", "Duration (seconds)", 0.2, 3.0, 1.0, 0.1)
+  local radius_setting = module:add_slider("Radius", "Radius", 1.0, 3.0, 3.0, 0.1)
   local use_theme_color = module:add_checkbox("Use Theme Color", "Use client theme color", true)
 
   local imageLoaded = false
@@ -29,14 +31,35 @@ The **Jump Circle** module tracks the jump events of the local player and render
   local lastTime = 99999.0
   local lastSpawnTime = 0.0
   local lastFrameTime = 0.0
+  local lastDownloadAttempt = 0.0
   local activeJumps = {}
+
+  -- Helper function to load or download the circle texture
+  local function loadOrDownloadCircle()
+      if client:load_texture(imageName, localFile) then
+          return true
+      end
+
+      local currentTime = os.clock()
+      if currentTime - lastDownloadAttempt < 15.0 then
+          return false
+      end
+      lastDownloadAttempt = currentTime
+
+      local url = "https://github.com/sayrexik1/apidoc/blob/main/images/circle.png?raw=true"
+      if client:download_file(url, localFile) then
+          return client:load_texture(imageName, localFile)
+      end
+
+      return false
+  end
 
   -- Module activation callback
   module:setOnEnable(function()
       activeJumps = {}
       lastFrameTime = os.clock()
       if not imageLoaded then
-          imageLoaded = client:load_texture(imageName, localFile)
+          imageLoaded = loadOrDownloadCircle()
       end
   end)
 
@@ -48,7 +71,7 @@ The **Jump Circle** module tracks the jump events of the local player and render
       end
 
       if not imageLoaded then
-          imageLoaded = client:load_texture(imageName, localFile)
+          imageLoaded = loadOrDownloadCircle()
       end
 
       -- Delta-time calculation
@@ -75,7 +98,7 @@ The **Jump Circle** module tracks the jump events of the local player and render
       lastTime = timeSinceJump
 
       local duration = duration_setting:getValue()
-      local maxRadius = 3.0
+      local maxRadius = radius_setting:getValue()
       local useTheme = use_theme_color:getValue()
       local disableWalls = false
       local wr = event:worldRenderer()
@@ -136,7 +159,3 @@ The **Jump Circle** module tracks the jump events of the local player and render
   end)
   ```
 </CodeGroup>
-
-<Note>
-  Ensure `circle.png` is placed in the scripts directory. A ring texture with soft edges works best.
-</Note>

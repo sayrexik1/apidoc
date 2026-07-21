@@ -3,7 +3,7 @@ title: "Hit Bubbles Module"
 description: "Example rendering of 3D spheres at the interaction/hit points of entities or air swings."
 ---
 
-The **Lua Hit Bubbles** module tracks recent local player hits and swing actions, then renders 3D spheres (using a circle texture) in the world at the coordinate location with a smooth fade-out effect.
+The **Hit Bubbles** module tracks recent local player hits and swing actions, then renders 3D spheres (using a circle texture) in the world at the coordinate location with a smooth fade-out effect.
 
 ## Features
 
@@ -16,7 +16,7 @@ The **Lua Hit Bubbles** module tracks recent local player hits and swing actions
 <CodeGroup>
   ```lua bubbles.lua
   -- Register module in VISUALS category
-  local module = client:register_module("Lua Hit Bubbles", "Renders 3D spheres at hit points", "VISUALS")
+  local module = client:register_module("Hit Bubbles", "Отображает сферы/эффекты в точках ударов", "VISUALS")
 
   -- Menu configuration settings
   local show_swings = module:add_checkbox("Show Air Swings", "Show on air swings", true)

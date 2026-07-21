@@ -8,6 +8,7 @@ description: "Пример рендеринга затухающего 3D кру
 ## Особенности скрипта
 
 - **Отслеживание прыжка**: Использует метод `minecraft:get_time_since_jump()`.
+- **Автоматическая загрузка ресурсов**: Если файл `circle.png` отсутствует локально, скрипт автоматически скачивает его из официального репозитория через `client:download_file()`.
 - **Затухание и масштабирование**: Масштабирует радиус круга со временем и гасит его непрозрачность.
 - **Интеграция с миром**: Накладывает текстуру на землю по координате `Y` прыжка с небольшим смещением для избежания мерцания текстуры (z-fighting).
 
@@ -18,8 +19,9 @@ description: "Пример рендеринга затухающего 3D кру
   -- Регистрация модуля в категории VISUALS
   local module = client:register_module("Jump Circle", "Отображает картинку под ногами игрока в месте прыжка", "VISUALS")
 
-  -- Слайдер длительности анимации и чекбокс цвета темы
+  -- Слайдеры длительности анимации, радиуса круга и чекбокс цвета темы
   local duration_setting = module:add_slider("Duration", "Длительность (сек)", 0.2, 3.0, 1.0, 0.1)
+  local radius_setting = module:add_slider("Radius", "Радиус", 1.0, 3.0, 3.0, 0.1)
   local use_theme_color = module:add_checkbox("Use Theme Color", "Цвет темы клиента", true)
 
   local imageLoaded = false
@@ -29,14 +31,35 @@ description: "Пример рендеринга затухающего 3D кру
   local lastTime = 99999.0
   local lastSpawnTime = 0.0
   local lastFrameTime = 0.0
+  local lastDownloadAttempt = 0.0
   local activeJumps = {}
+
+  -- Функция для загрузки или скачивания текстуры круга
+  local function loadOrDownloadCircle()
+      if client:load_texture(imageName, localFile) then
+          return true
+      end
+
+      local currentTime = os.clock()
+      if currentTime - lastDownloadAttempt < 15.0 then
+          return false
+      end
+      lastDownloadAttempt = currentTime
+
+      local url = "https://github.com/sayrexik1/apidoc/blob/main/images/circle.png?raw=true"
+      if client:download_file(url, localFile) then
+          return client:load_texture(imageName, localFile)
+      end
+
+      return false
+  end
 
   -- Событие включения модуля
   module:setOnEnable(function()
       activeJumps = {}
       lastFrameTime = os.clock()
       if not imageLoaded then
-          imageLoaded = client:load_texture(imageName, localFile)
+          imageLoaded = loadOrDownloadCircle()
       end
   end)
 
@@ -48,7 +71,7 @@ description: "Пример рендеринга затухающего 3D кру
       end
 
       if not imageLoaded then
-          imageLoaded = client:load_texture(imageName, localFile)
+          imageLoaded = loadOrDownloadCircle()
       end
 
       -- Delta Time (время между текущим и прошлым кадрами рендера)
@@ -75,7 +98,7 @@ description: "Пример рендеринга затухающего 3D кру
       lastTime = timeSinceJump
 
       local duration = duration_setting:getValue()
-      local maxRadius = 3.0
+      local maxRadius = radius_setting:getValue()
       local useTheme = use_theme_color:getValue()
       local disableWalls = false
       local wr = event:worldRenderer()
@@ -136,7 +159,3 @@ description: "Пример рендеринга затухающего 3D кру
   end)
   ```
 </CodeGroup>
-
-<Note>
-  Скрипт требует наличия файла `circle.png` в папке скриптов. Рекомендуется использовать прозрачное кольцо с размытыми краями.
-</Note>
