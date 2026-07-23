@@ -5,6 +5,10 @@ description: "Complete reference for Floral system, renderer, game state, and HU
 
 The Floral Lua API allows you to create custom modules, render 2D/3D graphics, draw text and blur effects, and inspect live Minecraft world state.
 
+<Warning>
+  **Security Sandboxing**: The `luajava` library is disabled. Direct access to Java reflection methods (such as `getClass`, `getClassLoader`, `loadClass`, `forName`, etc.) is blocked on all exposed Java instances to ensure a safe client environment.
+</Warning>
+
 <CardGroup cols={3}>
   <Card title="client" icon="sliders-horizontal" href="#client-system--asset-management">
     System registration, local & remote texture loading, asset management.
@@ -221,6 +225,56 @@ The `LuaModule` object is returned when registering a module using `client:regis
     end)
     ```
   </Accordion>
+
+  <Accordion title="module:open_settings(x, y, width)">
+    Opens the native HUD settings popup window for this module at the specified coordinates and width.
+
+    - **Parameters**:
+      - `x` *(float)*: X screen coordinate.
+      - `y` *(float)*: Y screen coordinate.
+      - `width` *(float)*: Width of the settings panel.
+
+    ```lua
+    module:open_settings(x, y + 45, 220)
+    ```
+  </Accordion>
+
+  <Accordion title="module:close_settings()">
+    Closes the active HUD settings popup window.
+
+    ```lua
+    module:close_settings()
+    ```
+  </Accordion>
+
+  <Accordion title="module:isEnabled()">
+    Checks whether the module is currently active (enabled).
+
+    - **Returns**: `boolean` (`true` if enabled).
+
+    ```lua
+    local active = module:isEnabled()
+    ```
+  </Accordion>
+
+  <Accordion title="module:setEnabled(enabled)">
+    Programmatically enables or disables the module.
+
+    - **Parameters**:
+      - `enabled` *(boolean)*: `true` to enable, `false` to disable.
+
+    ```lua
+    module:setEnabled(true)
+    ```
+  </Accordion>
+
+  <Accordion title="module:toggle()">
+    Toggles the module's enabled state.
+
+    ```lua
+    module:toggle()
+    ```
+  </Accordion>
 </AccordionGroup>
 
 #### Setting Object Methods
@@ -306,9 +360,14 @@ Returned by `renderer:begin_drag()`. Allows developers to implement interactive,
 
 | Method | Returns | Description |
 | :--- | :--- | :--- |
-| `session:positionX()` | `float` | Gets the current calculated X screen coordinate. |
-| `session:positionY()` | `float` | Gets the current calculated Y screen coordinate. |
+| `session:id()` | `string` | Returns the dragging session ID. |
+| `session:positionX()` | `float` | Gets the current calculated X screen coordinate (or resolved preferred X). |
+| `session:positionY()` | `float` | Gets the current calculated Y screen coordinate (or resolved preferred Y). |
+| `session:width()` | `float` | Returns the width of the draggable session. |
+| `session:height()` | `float` | Returns the height of the draggable session. |
 | `session:dragging()` | `boolean` | Returns `true` if the HUD element is actively being dragged by the mouse. |
+| `session:alphaAdjusted()` | `boolean` | Returns `true` if the element opacity was adjusted by the manager. |
+| `session:rightClicked()` | `boolean` | Returns `true` if the draggable region was right-clicked this frame. |
 
 ### 3D Rendering
 
@@ -317,9 +376,10 @@ Returned by `renderer:begin_drag()`. Allows developers to implement interactive,
 | `renderer:get_camera_vectors(worldRenderer)` | `float[]` | Retrieve camera right/up vectors `[rxX, rxY, rxZ, ruX, ruY, ruZ]`. |
 | `renderer:draw_quad_3d(worldRenderer, x1,y1,z1, x2,y2,z2, x3,y3,z3, x4,y4,z4, color, disableDepth)` | `void` | Draw solid untextured 3D quad in world coordinates. |
 | `renderer:draw_textured_quad_3d(worldRenderer, textureName, x1,y1,z1, x2,y2,z2, x3,y3,z3, x4,y4,z4, u0,v0, u1,v1, u2,v2, u3,v3, color, isAdditive, disableDepth)` | `void` | Render 3D textured quad in world coordinates. |
-| `renderer:draw_cube(worldRenderer, targetEntity, animValue, redIntensity, textureType, baseColor, redOnHit)` | `void` | Draw detailed custom 3D cube over target entity. |
-| `renderer:draw_cube_simple(worldRenderer, targetEntity, tickDelta, size, color, useSecondTexture)` | `void` | Draw simple 3D cube over entity with texture. |
-| `renderer:draw_target_esp(worldRenderer, targetEntity, mode, frameDepth, movingValue, alpha, clientColor, accentColor, redOnHit, impactProgress)` | `void` | Draw native client target ESP rings/box. |
+| `renderer:draw_text_3d(worldRenderer, text, x, y, z, color, scale, disableDepth)` | `void` | Draws a 3D billboard text in the world at the specified coordinates. |
+| `renderer:draw_cube(worldRenderer, targetLuaEntity, animValue, redIntensity, textureType, baseColor, redOnHit)` | `void` | Draw detailed custom 3D cube over target entity. |
+| `renderer:draw_cube_simple(worldRenderer, targetLuaEntity, tickDelta, size, color, useSecondTexture)` | `void` | Draw simple 3D cube over entity with texture. |
+| `renderer:draw_target_esp(worldRenderer, targetLuaEntity, mode, frameDepth, movingValue, alpha, clientColor, accentColor, redOnHit, impactProgress)` | `void` | Draw native client target ESP rings/box. |
 | `renderer:update_target_esp()` | `void` | Refreshes active client target ESP settings. |
 
 <CodeGroup>
@@ -355,23 +415,35 @@ Access live Minecraft state, entity metrics, keybinds, and status effects.
 | `minecraft:screen_width()` | `int` | Game window width in pixels. |
 | `minecraft:screen_height()` | `int` | Game window height in pixels. |
 | `minecraft:get_key_name(keyCode)` | `String` | Gets readable name of key based on its LWJGL scan code. |
+| `minecraft:get_x()` | `double` | Returns local player X coordinate. |
+| `minecraft:get_y()` | `double` | Returns local player Y coordinate. |
+| `minecraft:get_z()` | `double` | Returns local player Z coordinate. |
+| `minecraft:get_hp()` | `float` | Returns local player health. |
+| `minecraft:get_max_hp()` | `float` | Returns local player max health. |
 
 ### Player & Entity Data
 
+All entities are returned as secure, opaque `LuaEntity` handles.
+
 | Method | Return Type | Description |
 | :--- | :--- | :--- |
-| `minecraft:get_local_player()` | `LivingEntity` | Local player entity reference. |
-| `minecraft:get_target_entity()` | `LivingEntity` | Entity currently targeted in crosshair. |
-| `minecraft:get_entities()` | `LivingEntity[]` | Returns array of all loaded entities in render distance. |
-| `minecraft:get_entity_name(entity)` | `String` | Display name of target entity. |
-| `minecraft:get_entity_hp(entity)` | `float` | Current health points of entity. |
-| `minecraft:get_entity_max_hp(entity)` | `float` | Maximum health points of entity. |
-| `minecraft:get_entity_skin(entity)` | `String` | Texture identifier or skin URL. |
-| `minecraft:get_entity_x/y/z(entity)` | `float` | Current world coordinates `(X, Y, Z)`. |
-| `minecraft:get_entity_prev_x/y/z(entity)` | `float` | Previous frame coordinates for interpolation. |
-| `minecraft:get_entity_width/height(entity)` | `float` | Entity bounding box dimensions. |
-| `minecraft:is_entity_player(entity)` | `boolean` | Checks if targeted entity is a player. |
-| `minecraft:is_entity_alive(entity)` | `boolean` | Checks if the specified entity object is currently alive. |
+| `minecraft:get_local_player()` | `LuaEntity` | Local player entity reference. |
+| `minecraft:get_target_entity()` | `LuaEntity` | Entity currently targeted in crosshair. |
+| `minecraft:get_entities()` | `LuaEntity[]` | **[DISABLED]** Throws `LuaError` due to fair-play/security constraints to prevent global radar/ESPOverlay scripts. |
+| `minecraft:get_entity_name(luaEntity)` | `String` | Display name of target entity. |
+| `minecraft:get_entity_hp(luaEntity)` | `float` | Current health points of entity. |
+| `minecraft:get_entity_max_hp(luaEntity)` | `float` | Maximum health points of entity. |
+| `minecraft:get_entity_skin(luaEntity)` | `String` | Texture identifier or skin URL. |
+| `minecraft:get_entity_x(luaEntity)` | `double` | Current world X coordinate. |
+| `minecraft:get_entity_y(luaEntity)` | `double` | Current world Y coordinate. |
+| `minecraft:get_entity_z(luaEntity)` | `double` | Current world Z coordinate. |
+| `minecraft:get_entity_prev_x(luaEntity)` | `double` | Previous frame X coordinate. |
+| `minecraft:get_entity_prev_y(luaEntity)` | `double` | Previous frame Y coordinate. |
+| `minecraft:get_entity_prev_z(luaEntity)` | `double` | Previous frame Z coordinate. |
+| `minecraft:get_entity_width(luaEntity)` | `float` | Entity bounding box width. |
+| `minecraft:get_entity_height(luaEntity)` | `float` | Entity bounding box height. |
+| `minecraft:is_entity_player(luaEntity)` | `boolean` | Checks if targeted entity is a player. |
+| `minecraft:is_entity_alive(luaEntity)` | `boolean` | Checks if the specified entity object is currently alive. |
 
 ### Movement & Actions
 
@@ -427,3 +499,76 @@ Access live Minecraft state, entity metrics, keybinds, and status effects.
   -- }
   ```
 </CodeGroup>
+
+---
+
+## 3. Practical Example: Dragging & Right-Click Settings Popup
+
+Here is a complete, working example showing how to build a custom HUD module that can be dragged, and opens the native settings popup on right-click:
+
+```lua drag_hud.lua
+-- Register our module under HUD category (appears in Floral overlay menu)
+local module = client:register_module("Lua Drag HUD", "Example with settings popup on right-click", "HUD")
+
+-- Keep only scale setting, position coordinates X and Y are handled automatically by the client per session ID
+local scale_setting = module:add_slider("HUD Scale", "Font Size", 8, 20, 11, 1)
+
+-- Caching helper variables (prevents client lag from executing calculations every frame)
+local cached_username = ""
+local cached_text = ""
+local cached_width = 120
+local last_update_time = 0.0
+
+-- Main module render callback (executed every frame when enabled)
+module:on_render(function()
+    if not minecraft:is_in_world() then return end
+
+    local current_time = os.clock()
+    local scale = scale_setting:getValue()
+
+    -- 1. Read username once on startup
+    if cached_username == "" then
+        cached_username = minecraft:get_username()
+    end
+
+    -- 2. Update active FPS value and text width on a 150ms timer (optimizes rendering performance)
+    if current_time - last_update_time > 0.15 or cached_text == "" then
+        cached_text = "FPS: " .. tostring(minecraft:get_fps()) .. "  |  User: " .. cached_username
+        cached_width = renderer:get_text_width(cached_text, scale)
+        last_update_time = current_time
+    end
+
+    -- 3. Calculate dynamic bounds with padding offsets
+    local width = cached_width + 24
+    local height = scale + 18
+
+    -- 4. Hook draggable state (100, 100 is default startup coords)
+    local session = renderer:begin_drag("floral.custom_fps_hud", 100, 100, width, height)
+    local x = session:positionX()
+    local y = session:positionY()
+
+    -- Open native settings overlay panel on HUD right click
+    if session:rightClicked() then
+        module:open_settings(x, y + height + 6, 200)
+    end
+
+    -- Render customization outline box when actively dragging HUD
+    if session:dragging() then
+        renderer:render_drag_outline(session, 8, 1.0)
+    end
+
+    -- 5. Draw background overlay card with premium shader blur
+    local color_bg = renderer:rgba(18, 18, 22, 195)
+    local color_primary = renderer:get_client_primary_color()
+
+    renderer:prepare_blur(6.0)
+    renderer:draw_blur(x, y, width, height, 8)
+    renderer:draw_rect_rounding(x, y, width, height, 8, color_bg)
+
+    -- 6. Draw perfectly centered text
+    renderer:draw_text_centered_in_rect(cached_text, x, y, width, height, color_primary, scale)
+
+    -- 7. End active drag session
+    renderer:end_drag(session)
+end)
+```

@@ -5,6 +5,10 @@ description: "Полное справочное руководство по мо
 
 Lua API в **Floral** позволяет создавать пользовательские модули, отрисовывать 2D/3D графику, добавлять текст и эффекты размытия, а также получать информацию о мире Minecraft в реальном времени.
 
+<Warning>
+  **Песочница безопасности**: библиотека `luajava` полностью отключена. Прямой доступ к методам Java-рефлексии (таким как `getClass`, `getClassLoader`, `loadClass`, `forName` и т.д.) заблокирован на всех переданных Java-объектах в целях безопасности среды клиента.
+</Warning>
+
 <CardGroup cols={3}>
   <Card title="client" icon="sliders-horizontal" href="#client-системное-управление-и-ресурсы">
     Регистрация модулей, загрузка локальных и удаленных текстур, управление файлами.
@@ -221,6 +225,56 @@ Lua API в **Floral** позволяет создавать пользовате
     end)
     ```
   </Accordion>
+
+  <Accordion title="module:open_settings(x, y, width)">
+    Открывает нативное HUD-меню настроек данного модуля на экране.
+
+    - **Параметры**:
+      - `x` *(float)*: Координата X для появления окна.
+      - `y` *(float)*: Координата Y для появления окна.
+      - `width` *(float)*: Ширина окна настроек.
+
+    ```lua
+    module:open_settings(x, y + 45, 220)
+    ```
+  </Accordion>
+
+  <Accordion title="module:close_settings()">
+    Закрывает активное HUD-меню настроек модуля.
+
+    ```lua
+    module:close_settings()
+    ```
+  </Accordion>
+
+  <Accordion title="module:isEnabled()">
+    Проверяет, активен (включен) ли модуль в данный момент.
+
+    - **Возвращает**: `boolean` (`true` если включен).
+
+    ```lua
+    local active = module:isEnabled()
+    ```
+  </Accordion>
+
+  <Accordion title="module:setEnabled(enabled)">
+    Программно включает или выключает модуль.
+
+    - **Параметры**:
+      - `enabled` *(boolean)*: `true` для включения, `false` для выключения.
+
+    ```lua
+    module:setEnabled(true)
+    ```
+  </Accordion>
+
+  <Accordion title="module:toggle()">
+    Переключает состояние модуля (включает, если выключен, и наоборот).
+
+    ```lua
+    module:toggle()
+    ```
+  </Accordion>
 </AccordionGroup>
 
 #### Методы настроек
@@ -306,9 +360,14 @@ Lua API в **Floral** позволяет создавать пользовате
 
 | Метод | Возвращает | Описание |
 | :--- | :--- | :--- |
-| `session:positionX()` | `float` | Возвращает текущую координату X перетаскиваемого элемента. |
-| `session:positionY()` | `float` | Возвращает текущую координату Y перетаскиваемого элемента. |
+| `session:id()` | `string` | Возвращает строковый идентификатор сессии перетаскивания. |
+| `session:positionX()` | `float` | Возвращает текущую координату X перетаскиваемого элемента (или разрешенную предпочтительную координату X). |
+| `session:positionY()` | `float` | Возвращает текущую координату Y перетаскиваемого элемента (или разрешенную предпочтительную координату Y). |
+| `session:width()` | `float` | Возвращает ширину области перетаскивания. |
+| `session:height()` | `float` | Возвращает высоту области перетаскивания. |
 | `session:dragging()` | `boolean` | Возвращает `true`, если элемент перетаскивается в данный момент. |
+| `session:alphaAdjusted()` | `boolean` | Возвращает `true`, если прозрачность элемента была скорректирована менеджером перетаскивания. |
+| `session:rightClicked()` | `boolean` | Возвращает `true`, если по элементу был совершен правый клик в этом кадре. |
 
 ### 3D Рендеринг
 
@@ -317,9 +376,10 @@ Lua API в **Floral** позволяет создавать пользовате
 | `renderer:get_camera_vectors(worldRenderer)` | `float[]` | Получить векторы камеры `[rxX, rxY, rxZ, ruX, ruY, ruZ]`. |
 | `renderer:draw_quad_3d(worldRenderer, x1,y1,z1, x2,y2,z2, x3,y3,z3, x4,y4,z4, color, disableDepth)` | `void` | Отрисовка залитого 3D-полигона (4 вершины в мире) без текстуры. |
 | `renderer:draw_textured_quad_3d(worldRenderer, textureName, x1,y1,z1, x2,y2,z2, x3,y3,z3, x4,y4,z4, u0,v0, u1,v1, u2,v2, u3,v3, color, isAdditive, disableDepth)` | `void` | Отрисовка 3D текстурированного квадрата в мире. |
-| `renderer:draw_cube(worldRenderer, targetEntity, animValue, redIntensity, textureType, baseColor, redOnHit)` | `void` | Отрисовка детализированного куба (повороты, эффекты попадания) над сущностью. |
-| `renderer:draw_cube_simple(worldRenderer, targetEntity, tickDelta, size, color, useSecondTexture)` | `void` | Отрисовка простого куба над сущностью с текстурой. |
-| `renderer:draw_target_esp(worldRenderer, targetEntity, mode, frameDepth, movingValue, alpha, clientColor, accentColor, redOnHit, impactProgress)` | `void` | Отрисовка нативного эффекта Target ESP клиента вокруг цели. |
+| `renderer:draw_text_3d(worldRenderer, text, x, y, z, color, scale, disableDepth)` | `void` | Отрисовка 3D-текста (биллборда) в мире по указанным координатам. |
+| `renderer:draw_cube(worldRenderer, targetLuaEntity, animValue, redIntensity, textureType, baseColor, redOnHit)` | `void` | Отрисовка детализированного куба (повороты, эффекты попадания) над сущностью. |
+| `renderer:draw_cube_simple(worldRenderer, targetLuaEntity, tickDelta, size, color, useSecondTexture)` | `void` | Отрисовка простого куба над сущностью с текстурой. |
+| `renderer:draw_target_esp(worldRenderer, targetLuaEntity, mode, frameDepth, movingValue, alpha, clientColor, accentColor, redOnHit, impactProgress)` | `void` | Отрисовка нативного эффекта Target ESP клиента вокруг цели. |
 | `renderer:update_target_esp()` | `void` | Обновить состояние Target ESP. |
 
 <CodeGroup>
@@ -355,23 +415,35 @@ Lua API в **Floral** позволяет создавать пользовате
 | `minecraft:screen_width()` | `int` | Текущая ширина экрана игры в пикселях. |
 | `minecraft:screen_height()` | `int` | Текущая высота экрана игры в пикселях. |
 | `minecraft:get_key_name(keyCode)` | `String` | Возвращает текстовое имя клавиши по ее LWJGL-коду. |
+| `minecraft:get_x()` | `double` | Возвращает координату X локального игрока. |
+| `minecraft:get_y()` | `double` | Возвращает координату Y локального игрока. |
+| `minecraft:get_z()` | `double` | Возвращает координату Z локального игрока. |
+| `minecraft:get_hp()` | `float` | Возвращает текущее здоровье локального игрока. |
+| `minecraft:get_max_hp()` | `float` | Возвращает максимальное здоровье локального игрока. |
 
 ### Данные игрока и сущностей
 
+Все сущности возвращаются в виде безопасных непрозрачных хэндлов `LuaEntity`.
+
 | Метод | Тип ответа | Описание |
 | :--- | :--- | :--- |
-| `minecraft:get_local_player()` | `LivingEntity` | Ссылка на объект локального игрока. |
-| `minecraft:get_target_entity()` | `LivingEntity` | Сущность в прицеле. |
-| `minecraft:get_entities()` | `LivingEntity[]` | Возвращает массив всех загруженных сущностей в радиусе прорисовки. |
-| `minecraft:get_entity_name(entity)` | `String` | Имя сущности. |
-| `minecraft:get_entity_hp(entity)` | `float` | Текущее здоровье. |
-| `minecraft:get_entity_max_hp(entity)` | `float` | Максимальное здоровье. |
-| `minecraft:get_entity_skin(entity)` | `String` | Скин/текстура сущности. |
-| `minecraft:get_entity_x/y/z(entity)` | `float` | Координаты `(X, Y, Z)`. |
-| `minecraft:get_entity_prev_x/y/z(entity)` | `float` | Координаты на предыдущем кадре. |
-| `minecraft:get_entity_width/height(entity)` | `float` | Размеры хитбокса. |
-| `minecraft:is_entity_player(entity)` | `boolean` | Проверить, является ли сущность игроком. |
-| `minecraft:is_entity_alive(entity)` | `boolean` | Проверить, жива ли указанная сущность. |
+| `minecraft:get_local_player()` | `LuaEntity` | Ссылка на объект локального игрока. |
+| `minecraft:get_target_entity()` | `LuaEntity` | Сущность в прицеле игрока (под перекрестием). |
+| `minecraft:get_entities()` | `LuaEntity[]` | **[ОТКЛЮЧЕНО]** Вызывает ошибку `LuaError` в целях безопасности и честной игры для предотвращения создания радар/ESP читов. |
+| `minecraft:get_entity_name(luaEntity)` | `String` | Имя сущности. |
+| `minecraft:get_entity_hp(luaEntity)` | `float` | Текущее здоровье. |
+| `minecraft:get_entity_max_hp(luaEntity)` | `float` | Максимальное здоровье. |
+| `minecraft:get_entity_skin(luaEntity)` | `String` | Путь к скину/текстуре сущности. |
+| `minecraft:get_entity_x(luaEntity)` | `double` | Координата X сущности. |
+| `minecraft:get_entity_y(luaEntity)` | `double` | Координата Y сущности. |
+| `minecraft:get_entity_z(luaEntity)` | `double` | Координата Z сущности. |
+| `minecraft:get_entity_prev_x(luaEntity)` | `double` | Координата X сущности на предыдущем кадре. |
+| `minecraft:get_entity_prev_y(luaEntity)` | `double` | Координата Y сущности на предыдущем кадре. |
+| `minecraft:get_entity_prev_z(luaEntity)` | `double` | Координата Z сущности на предыдущем кадре. |
+| `minecraft:get_entity_width(luaEntity)` | `float` | Ширина хитбокса сущности. |
+| `minecraft:get_entity_height(luaEntity)` | `float` | Высота хитбокса сущности. |
+| `minecraft:is_entity_player(luaEntity)` | `boolean` | Является ли сущность игроком. |
+| `minecraft:is_entity_alive(luaEntity)` | `boolean` | Жива ли указанная сущность. |
 
 ### Движение и события
 
@@ -427,3 +499,76 @@ Lua API в **Floral** позволяет создавать пользовате
   -- }
   ```
 </CodeGroup>
+
+---
+
+## 3. Практический пример: Перетаскивание и нативное меню настроек по правому клику
+
+Ниже представлен полноценный рабочий пример создания пользовательского HUD-модуля, который поддерживает перетаскивание мышкой, масштабирование и открывает нативное меню настроек Floral при клике правой кнопкой мыши:
+
+```lua drag_hud.lua
+-- Регистрируем наш модуль в категории HUD (он появится в оверлей-меню Floral)
+local module = client:register_module("Lua Drag HUD", "Пример HUD с меню настроек по правому клику", "HUD")
+
+-- Оставляем только нужные настройки, позицию X и Y клиент сохранит автоматически по ID сессии
+local scale_setting = module:add_slider("HUD Scale", "Размер шрифта", 8, 20, 11, 1)
+
+-- Вспомогательные переменные для оптимизации (чтобы не перегружать ПК вычислениями каждый кадр)
+local cached_username = ""
+local cached_text = ""
+local cached_width = 120
+local last_update_time = 0.0
+
+-- Главный цикл рендеринга модуля (вызывается каждый игровой кадр)
+module:on_render(function()
+    if not minecraft:is_in_world() then return end
+
+    local current_time = os.clock()
+    local scale = scale_setting:getValue()
+
+    -- 1. Считываем имя игрока только один раз на старте
+    if cached_username == "" then
+        cached_username = minecraft:get_username()
+    end
+
+    -- 2. Обновляем FPS и ширину текста по таймеру раз в 150мс (вместо каждого кадра)
+    if current_time - last_update_time > 0.15 or cached_text == "" then
+        cached_text = "FPS: " .. tostring(minecraft:get_fps()) .. "  |  User: " .. cached_username
+        cached_width = renderer:get_text_width(cached_text, scale)
+        last_update_time = current_time
+    end
+
+    -- 3. Рассчитываем размеры рамки с учетом отступов
+    local width = cached_width + 24
+    local height = scale + 18
+
+    -- 4. Получаем координаты перетаскивания (100, 100 — это позиция при самом первом запуске)
+    local session = renderer:begin_drag("floral.custom_fps_hud", 100, 100, width, height)
+    local x = session:positionX()
+    local y = session:positionY()
+
+    -- Открываем настройки модуля при клике правой кнопкой мыши по HUD
+    if session:rightClicked() then
+        module:open_settings(x, y + height + 6, 200)
+    end
+
+    -- Отрисовываем контур HUD во время его перемещения в режиме кастомизации
+    if session:dragging() then
+        renderer:render_drag_outline(session, 8, 1.0)
+    end
+
+    -- 5. Рисуем фон с красивым размытием
+    local color_bg = renderer:rgba(18, 18, 22, 195)
+    local color_primary = renderer:get_client_primary_color()
+
+    renderer:prepare_blur(6.0)
+    renderer:draw_blur(x, y, width, height, 8)
+    renderer:draw_rect_rounding(x, y, width, height, 8, color_bg)
+
+    -- 6. Отрисовываем текст ровно по центру рамки
+    renderer:draw_text_centered_in_rect(cached_text, x, y, width, height, color_primary, scale)
+
+    -- 7. Завершаем сессию перетаскивания
+    renderer:end_drag(session)
+end)
+```

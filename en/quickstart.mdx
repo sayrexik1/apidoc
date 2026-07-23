@@ -29,27 +29,74 @@ All custom Lua scripts are located in the client configuration folder:
     Create a new file named `my_hud_module.lua`.
   </Step>
   <Step title="Add sample source code">
-    Insert the sample code below to register a HUD module:
+    Insert the sample code below to register an interactive HUD module:
 
     <CodeGroup>
       ```lua my_hud_module.lua
-      -- Register a module under the HUD category
+      -- Register our module in the HUD category (appears in Floral overlay menu)
       local module = client:register_module("Custom HUD", "Displays active FPS and username", "HUD")
 
-      -- Main render loop
-      function on_render()
+      -- Create slider for in-game font size adjustments
+      local scale_setting = module:add_slider("HUD Scale", "Font Size", 8, 20, 11, 1)
+
+      -- Helper variables for caching (prevents game lag from heavy calculations each frame)
+      local cached_username = ""
+      local cached_text = ""
+      local cached_width = 120
+      local last_update_time = 0.0
+
+      -- on_render is executed every render frame
+      module:on_render(function()
           if not minecraft:is_in_world() then return end
 
-          local color_bg = renderer:rgba(15, 15, 20, 180)
-          local color_primary = renderer:get_client_primary_color()
-          local text_info = "FPS: " .. tostring(minecraft:get_fps()) .. " | User: " .. minecraft:get_username()
+          local current_time = os.clock()
+          local scale = scale_setting:getValue()
 
-          -- Render shader blur, card background, and text
+          -- 1. Cache the username once on startup
+          if cached_username == "" then
+              cached_username = minecraft:get_username()
+          end
+
+          -- 2. Update FPS and text width periodically every 150ms (instead of every frame)
+          if current_time - last_update_time > 0.15 or cached_text == "" then
+              cached_text = "FPS: " .. tostring(minecraft:get_fps()) .. "  |  User: " .. cached_username
+              cached_width = renderer:get_text_width(cached_text, scale)
+              last_update_time = current_time
+          end
+
+          -- 3. Calculate box bounds with paddings
+          local width = cached_width + 24
+          local height = scale + 18
+
+          -- 4. Set up interactive dragging (100, 100 is default fallback coordinates)
+          local session = renderer:begin_drag("floral.custom_fps_hud", 100, 100, width, height)
+          local x = session:positionX()
+          local y = session:positionY()
+
+          -- Open native settings panel on HUD right click
+          if session:rightClicked() then
+              module:open_settings(x, y + height + 6, 200)
+          end
+
+          -- Draw interactive drag border overlay
+          if session:dragging() then
+              renderer:render_drag_outline(session, 8, 1.0)
+          end
+
+          -- 5. Render card background with premium shader blur
+          local color_bg = renderer:rgba(18, 18, 22, 195)
+          local color_primary = renderer:get_client_primary_color()
+
           renderer:prepare_blur(6.0)
-          renderer:draw_blur(10, 10, 220, 34, 8)
-          renderer:draw_rect_rounding(10, 10, 220, 34, 8, color_bg)
-          renderer:draw_text_centered_in_rect(text_info, 10, 10, 220, 34, color_primary, 1.0)
-      end
+          renderer:draw_blur(x, y, width, height, 8)
+          renderer:draw_rect_rounding(x, y, width, height, 8, color_bg)
+
+          -- 6. Draw perfectly centered text
+          renderer:draw_text_centered_in_rect(cached_text, x, y, width, height, color_primary, scale)
+
+          -- 7. End drag session
+          renderer:end_drag(session)
+      end)
       ```
     </CodeGroup>
   </Step>
