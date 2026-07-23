@@ -35,6 +35,10 @@ Lua API в **Floral** позволяет создавать пользовате
       - `category` *(string)*: Категория (`"VISUALS"`, `"HUD"`, `"TOOLS"`).
     - **Возвращает**: Объект `LuaModule`.
 
+    <Note>
+      Вызывает ошибку, если имя модуля уже зарегистрировано встроенным плагином или другим активным скриптом.
+    </Note>
+
     <CodeGroup>
       ```lua Регистрация модуля
       local my_module = client:register_module("My Module", "Custom Lua script", "HUD")
@@ -58,7 +62,7 @@ Lua API в **Floral** позволяет создавать пользовате
   </Accordion>
 
   <Accordion title="client:load_texture_url(textureName, url)">
-    Загружает текстуру напрямую по HTTP/HTTPS URL.
+    Загружает текстуру напрямую по HTTP/HTTPS URL и кэширует ее локально на диске.
 
     - **Параметры**:
       - `textureName` *(string)*: Уникальный идентификатор текстуры.
@@ -281,18 +285,18 @@ Lua API в **Floral** позволяет создавать пользовате
 | `renderer:draw_texture(textureName, x, y, w, h, color)` | Отрисовка текстуры. |
 | `renderer:draw_texture_centered_in_rect(textureName, rx, ry, rw, rh, destW, destH, color)` | Отрисовка текстуры по центру прямоугольной области. |
 | `renderer:draw_texture_rotated(textureName, x, y, w, h, rotationDegrees, color)` | Отрисовка повернутой текстуры. |
-| `renderer:draw_texture_centered_in_rect_rotated(...)` | Повернутая текстура по центру прямоугольной области. |
+| `renderer:draw_texture_centered_in_rect_rotated(textureName, rx, ry, rw, rh, destW, destH, rotationDegrees, color)` | Повернутая текстура по центру прямоугольной области. |
 | `renderer:draw_texture_region(textureName, x, y, w, h, u0, v0, u1, v1, color)` | Отрисовка части (региона) текстуры по UV-координатам (0.0 - 1.0). |
-| `renderer:draw_texture_region_rounded(...)` | Отрисовка кадрированной текстуры с закруглением. |
-| `renderer:draw_texture_region_rotated(...)` | Отрисовка повернутой части (региона) текстуры. |
+| `renderer:draw_texture_region_rounded(textureName, x, y, w, h, u0, v0, u1, v1, rounding, color)` | Отрисовка кадрированной текстуры с закруглением. |
+| `renderer:draw_texture_region_rotated(textureName, x, y, w, h, u0, v0, u1, v1, rotationDegrees, color)` | Отрисовка повернутой части (региона) текстуры. |
 
 ### Трансформации и перетаскивание
 
 | Метод | Возвращает | Описание |
 | :--- | :--- | :--- |
-| `renderer:begin_drag(id, x, y, w, h)` | `DragSession` | Начать сессию перетаскивания элемента. |
+| `renderer:begin_drag(id, preferredX, preferredY, w, h)` | `DragSession` | Начать сессию перетаскивания элемента. |
 | `renderer:end_drag(session)` | `void` | Завершить сессию перетаскивания. |
-| `renderer:render_drag_outline(session, rounding, scale)` | `void` | Нарисовать рамку вокруг перетаскиваемого HUD-элемента. |
+| `renderer:render_drag_outline(session, cornerRadius, visibilityProgress)` | `void` | Нарисовать рамку вокруг перетаскиваемого HUD-элемента. |
 | `renderer:push_scale(scaleX, scaleY, centerX, centerY)` | `void` | Применить масштабирование относительно центра. |
 | `renderer:pop_scale()` | `void` | Сбросить масштабирование. |
 
@@ -311,11 +315,11 @@ Lua API в **Floral** позволяет создавать пользовате
 | Метод | Возвращает | Описание |
 | :--- | :--- | :--- |
 | `renderer:get_camera_vectors(worldRenderer)` | `float[]` | Получить векторы камеры `[rxX, rxY, rxZ, ruX, ruY, ruZ]`. |
-| `renderer:draw_quad_3d(...)` | `void` | Отрисовка залитого 3D-полигона (4 вершины в мире) без текстуры. |
-| `renderer:draw_textured_quad_3d(...)` | `void` | Отрисовка 3D текстурированного квадрата в мире. |
-| `renderer:draw_cube(...)` | `void` | Отрисовка детализированного куба (повороты, эффекты попадания) над сущностью. |
-| `renderer:draw_cube_simple(...)` | `void` | Отрисовка простого куба над сущностью с текстурой. |
-| `renderer:draw_target_esp(...)` | `void` | Отрисовка нативного эффекта Target ESP клиента вокруг цели. |
+| `renderer:draw_quad_3d(worldRenderer, x1,y1,z1, x2,y2,z2, x3,y3,z3, x4,y4,z4, color, disableDepth)` | `void` | Отрисовка залитого 3D-полигона (4 вершины в мире) без текстуры. |
+| `renderer:draw_textured_quad_3d(worldRenderer, textureName, x1,y1,z1, x2,y2,z2, x3,y3,z3, x4,y4,z4, u0,v0, u1,v1, u2,v2, u3,v3, color, isAdditive, disableDepth)` | `void` | Отрисовка 3D текстурированного квадрата в мире. |
+| `renderer:draw_cube(worldRenderer, targetEntity, animValue, redIntensity, textureType, baseColor, redOnHit)` | `void` | Отрисовка детализированного куба (повороты, эффекты попадания) над сущностью. |
+| `renderer:draw_cube_simple(worldRenderer, targetEntity, tickDelta, size, color, useSecondTexture)` | `void` | Отрисовка простого куба над сущностью с текстурой. |
+| `renderer:draw_target_esp(worldRenderer, targetEntity, mode, frameDepth, movingValue, alpha, clientColor, accentColor, redOnHit, impactProgress)` | `void` | Отрисовка нативного эффекта Target ESP клиента вокруг цели. |
 | `renderer:update_target_esp()` | `void` | Обновить состояние Target ESP. |
 
 <CodeGroup>

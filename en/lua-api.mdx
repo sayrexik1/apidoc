@@ -35,6 +35,10 @@ The `client` module handles module registration and texture/file downloading.
       - `category` *(string)*: One of `"VISUALS"`, `"HUD"`, `"TOOLS"`.
     - **Returns**: `LuaModule` object.
 
+    <Note>
+      Returns an error if the module name is already registered by a native module or another active script.
+    </Note>
+
     <CodeGroup>
       ```lua Register Module
       local my_module = client:register_module("My Module", "Custom Lua script", "HUD")
@@ -58,7 +62,7 @@ The `client` module handles module registration and texture/file downloading.
   </Accordion>
 
   <Accordion title="client:load_texture_url(textureName, url)">
-    Downloads and loads a texture directly from an HTTP/HTTPS URL.
+    Downloads and loads a texture directly from an HTTP/HTTPS URL, caching it on disk.
 
     - **Parameters**:
       - `textureName` *(string)*: Unique texture identifier.
@@ -281,18 +285,18 @@ The `renderer` module provides high-performance drawing routines for HUD element
 | `renderer:draw_texture(textureName, x, y, w, h, color)` | Draw loaded texture quad. |
 | `renderer:draw_texture_centered_in_rect(textureName, rx, ry, rw, rh, destW, destH, color)` | Draw texture centered inside target area. |
 | `renderer:draw_texture_rotated(textureName, x, y, w, h, rotationDegrees, color)` | Draw rotated texture. |
-| `renderer:draw_texture_centered_in_rect_rotated(...)` | Draw rotated texture centered inside target area. |
+| `renderer:draw_texture_centered_in_rect_rotated(textureName, rx, ry, rw, rh, destW, destH, rotationDegrees, color)` | Draw rotated texture centered inside target area. |
 | `renderer:draw_texture_region(textureName, x, y, w, h, u0, v0, u1, v1, color)` | Draw cropped texture region using UV values (0.0 - 1.0). |
-| `renderer:draw_texture_region_rounded(...)` | Draw cropped texture region with rounded corners. |
-| `renderer:draw_texture_region_rotated(...)` | Draw cropped and rotated texture region. |
+| `renderer:draw_texture_region_rounded(textureName, x, y, w, h, u0, v0, u1, v1, rounding, color)` | Draw cropped texture region with rounded corners. |
+| `renderer:draw_texture_region_rotated(textureName, x, y, w, h, u0, v0, u1, v1, rotationDegrees, color)` | Draw cropped and rotated texture region. |
 
 ### Transformations & Drag Sessions
 
 | Method | Returns | Description |
 | :--- | :--- | :--- |
-| `renderer:begin_drag(id, x, y, w, h)` | `DragSession` | Initialize draggable UI region. |
+| `renderer:begin_drag(id, preferredX, preferredY, w, h)` | `DragSession` | Initialize draggable UI region. |
 | `renderer:end_drag(session)` | `void` | Finalize active drag session. |
-| `renderer:render_drag_outline(session, rounding, scale)` | `void` | Draw a border outline around a draggable HUD element. |
+| `renderer:render_drag_outline(session, cornerRadius, visibilityProgress)` | `void` | Draw a border outline around a draggable HUD element. |
 | `renderer:push_scale(scaleX, scaleY, centerX, centerY)` | `void` | Push matrix scale transform around center point. |
 | `renderer:pop_scale()` | `void` | Pop active scale transformation. |
 
@@ -311,11 +315,11 @@ Returned by `renderer:begin_drag()`. Allows developers to implement interactive,
 | Method | Returns | Description |
 | :--- | :--- | :--- |
 | `renderer:get_camera_vectors(worldRenderer)` | `float[]` | Retrieve camera right/up vectors `[rxX, rxY, rxZ, ruX, ruY, ruZ]`. |
-| `renderer:draw_quad_3d(...)` | `void` | Draw solid untextured 3D quad in world coordinates. |
-| `renderer:draw_textured_quad_3d(...)` | `void` | Render 3D textured quad in world coordinates. |
-| `renderer:draw_cube(...)` | `void` | Draw detailed custom 3D cube over target entity. |
-| `renderer:draw_cube_simple(...)` | `void` | Draw simple 3D cube over entity with texture. |
-| `renderer:draw_target_esp(...)` | `void` | Draw native client target ESP rings/box. |
+| `renderer:draw_quad_3d(worldRenderer, x1,y1,z1, x2,y2,z2, x3,y3,z3, x4,y4,z4, color, disableDepth)` | `void` | Draw solid untextured 3D quad in world coordinates. |
+| `renderer:draw_textured_quad_3d(worldRenderer, textureName, x1,y1,z1, x2,y2,z2, x3,y3,z3, x4,y4,z4, u0,v0, u1,v1, u2,v2, u3,v3, color, isAdditive, disableDepth)` | `void` | Render 3D textured quad in world coordinates. |
+| `renderer:draw_cube(worldRenderer, targetEntity, animValue, redIntensity, textureType, baseColor, redOnHit)` | `void` | Draw detailed custom 3D cube over target entity. |
+| `renderer:draw_cube_simple(worldRenderer, targetEntity, tickDelta, size, color, useSecondTexture)` | `void` | Draw simple 3D cube over entity with texture. |
+| `renderer:draw_target_esp(worldRenderer, targetEntity, mode, frameDepth, movingValue, alpha, clientColor, accentColor, redOnHit, impactProgress)` | `void` | Draw native client target ESP rings/box. |
 | `renderer:update_target_esp()` | `void` | Refreshes active client target ESP settings. |
 
 <CodeGroup>
